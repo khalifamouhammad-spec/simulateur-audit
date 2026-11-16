@@ -1,21 +1,30 @@
-// Point d'entrée : routage par ancre (#/accueil, #/mission/<id>, #/historique, #/parametres).
-import { afficherAccueil } from './ui-accueil.js';
-import { afficherMission } from './ui-mission.js';
-import { afficherHistorique } from './ui-historique.js';
-import { afficherParametres } from './ui-parametres.js';
+// Point d'entrée : routage par ancre.
+//   #/                         tableau de bord
+//   #/parametres               paramètres
+//   #/dossier/<id>/<code>      dossier ouvert sur un élément de l'arborescence
+import { afficherTableauDeBord } from './ui/tableau-de-bord.js';
+import { afficherParametres } from './ui/parametres.js';
+import { afficherDossier } from './ui/dossier.js';
+import { echapper } from './utils.js';
 
-const ROUTES = { accueil: afficherAccueil, mission: afficherMission, historique: afficherHistorique, parametres: afficherParametres };
+let fermerVue = null; // fonction de nettoyage de la vue courante (minuteur du dossier)
 
-function router() {
-  const [nom, argument] = location.hash.replace(/^#\/?/, '').split('/');
-  const route = ROUTES[nom] ? nom : 'accueil';
+async function router() {
+  const [nom, ...args] = location.hash.replace(/^#\/?/, '').split('/');
+  const route = nom === 'dossier' ? 'dossier' : nom === 'parametres' ? 'parametres' : 'tableau';
+  if (fermerVue) { await fermerVue(); fermerVue = null; }
   // Un conteneur neuf à chaque navigation évite d'empiler les écouteurs d'événements.
-  const ancien = document.getElementById('vue');
-  const vue = document.createElement('main');
+  const vue = document.createElement('div');
   vue.id = 'vue';
-  ancien.replaceWith(vue);
-  document.querySelectorAll('.bandeau nav a').forEach((a) => a.classList.toggle('actif', a.dataset.route === (route === 'mission' ? 'accueil' : route)));
-  ROUTES[route](vue, argument);
+  document.getElementById('vue').replaceWith(vue);
+  document.querySelectorAll('.barre-app nav a').forEach((a) => a.classList.toggle('actif', a.dataset.route === (route === 'dossier' ? 'tableau' : route)));
+  try {
+    if (route === 'dossier') fermerVue = await afficherDossier(vue, args[0], args[1]);
+    else if (route === 'parametres') await afficherParametres(vue);
+    else await afficherTableauDeBord(vue);
+  } catch (e) {
+    vue.innerHTML = `<main class="page"><p class="message erreur">${echapper(e.message)}</p></main>`;
+  }
 }
 
 window.addEventListener('hashchange', router);

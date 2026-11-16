@@ -1,0 +1,125 @@
+:root {
+  --fond: #eef1f5;
+  --panneau: #ffffff;
+  --texte: #1b2430;
+  --discret: #5f6b7a;
+  --bord: #d5dbe3;
+  --marine: #16324f;
+  --marine-2: #1f4468;
+  --accent: #1f5fa8;
+  --accent-clair: #e6effa;
+  --vert: #1e7a46; --vert-clair: #e2f3e8;
+  --orange: #9a5b00; --orange-clair: #fdf0d5;
+  --rouge: #b3261e; --rouge-clair: #fbe9e7;
+  --gris: #6b7684; --gris-clair: #e9edf2;
+  --hauteur-barre: 44px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--texte); background: var(--fond); }
+h1 { font-size: 1.3rem; margin: 0 0 .2rem; }
+h2 { font-size: 1rem; margin: 0 0 .5rem; }
+p { margin: .4rem 0; }
+a { color: var(--accent); }
+ul { margin: .3rem 0; padding-left: 1.2rem; }
+.discret { color: var(--discret); font-size: .86rem; }
+.code { font-family: ui-monospace, Consolas, monospace; font-size: .92em; color: var(--accent); }
+
+/* Barre de l'application */
+.barre-app { height: var(--hauteur-barre); display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 .9rem; background: var(--marine); }
+.barre-app .marque { color: #fff; font-weight: 600; text-decoration: none; }
+.barre-app nav { display: flex; gap: .2rem; }
+.barre-app nav a { color: #cfdbe8; text-decoration: none; padding: .25rem .65rem; border-radius: 5px; font-size: .92rem; }
+.barre-app nav a.actif { background: rgba(255, 255, 255, .16); color: #fff; }
+
+/* Pages simples (tableau de bord, paramètres) */
+.page { max-width: 1250px; margin: 0 auto; padding: 1rem; }
+.page.etroite { max-width: 760px; }
+.panneau { background: var(--panneau); border: 1px solid var(--bord); border-radius: 6px; padding: .85rem 1rem; margin: .8rem 0; }
+.ligne { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.ligne.espace { justify-content: space-between; }
+.ligne.fin { justify-content: flex-end; margin-top: .9rem; }
+.grille { display: grid; gap: .2rem .9rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; margin: .8rem 0; }
+.indicateur { background: var(--panneau); border: 1px solid var(--bord); border-left: 3px solid var(--accent); border-radius: 6px; padding: .5rem .75rem; }
+.indicateur span { display: block; color: var(--discret); font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+.indicateur strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+
+/* Formulaires */
+label { display: block; font-weight: 600; font-size: .85rem; margin: .7rem 0 .2rem; }
+label.en-ligne { display: flex; align-items: center; gap: .5rem; margin: 0; }
+label.en-ligne select { width: auto; }
+input[type=text], input[type=password], input[type=number], input[type=search], select, textarea {
+  width: 100%; padding: .42rem .55rem; border: 1px solid var(--bord); border-radius: 5px; font: inherit; background: #fff; color: inherit;
+}
+textarea { min-height: 7rem; resize: vertical; }
+input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button, a.bouton { font: inherit; cursor: pointer; padding: .42rem .85rem; border-radius: 5px; border: 1px solid var(--bord); background: #fff; color: var(--texte); text-decoration: none; display: inline-block; }
+button.principal { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.danger { color: var(--rouge); }
+button.petit, a.bouton.petit { padding: .15rem .5rem; font-size: .84rem; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+.message { padding: .55rem .75rem; border-radius: 5px; margin: .6rem 0; }
+.message.info { background: var(--accent-clair); }
+.message.erreur { background: var(--rouge-clair); color: var(--rouge); }
+.message.succes { background: var(--vert-clair); color: var(--vert); }
+.message.attention { background: var(--orange-clair); color: var(--orange); }
+
+/* Tableaux denses */
+.defilement { overflow-x: auto; }
+table.dense { border-collapse: collapse; width: 100%; font-size: .86rem; }
+table.dense th, table.dense td { padding: .32rem .55rem; border-bottom: 1px solid #e8ecf1; text-align: left; vertical-align: middle; }
+table.dense th { background: #f0f3f7; font-size: .76rem; text-transform: uppercase; letter-spacing: .03em; color: var(--discret); white-space: nowrap; }
+table.dense tbody tr:hover td { background: #f7f9fc; }
+td.nombre, th.nombre { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.actions { white-space: nowrap; text-align: right; }
+td.vide { text-align: center; color: var(--discret); padding: 1.5rem; }
+
+/* Pastilles de statut */
+.pastille { display: inline-block; padding: .05rem .55rem; border-radius: 10px; font-size: .76rem; font-weight: 600; white-space: nowrap; }
+.pastille.gris { background: var(--gris-clair); color: var(--gris); }
+.pastille.bleu { background: var(--accent-clair); color: var(--accent); }
+.pastille.orange { background: var(--orange-clair); color: var(--orange); }
+.pastille.vert { background: var(--vert-clair); color: var(--vert); }
+.point { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; background: #aab3bf; }
+.point.bleu { background: #3b82d6; }
+.point.orange { background: #e39a12; }
+.point.vert { background: #2e9d5b; }
+.point.verrou { background: none; border: 2px solid #8493a5; border-radius: 2px; }
+.jauge { display: inline-block; width: 70px; height: 7px; background: var(--gris-clair); border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: .4rem; }
+.jauge i { display: block; height: 100%; background: var(--vert); }
+
+/* Dossier ouvert */
+.bandeau-dossier { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.6rem; padding: .45rem .9rem; background: var(--panneau); border-bottom: 1px solid var(--bord); }
+.bandeau-dossier .client strong { display: block; font-size: 1.02rem; }
+.bandeau-dossier .client span { color: var(--discret); font-size: .82rem; }
+.bandeau-dossier .client { margin-right: auto; }
+.bandeau-dossier .info > span:first-child { display: block; color: var(--discret); font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+.bandeau-dossier .menu { display: none; }
+.espace-travail { display: flex; align-items: stretch; min-height: calc(100vh - var(--hauteur-barre) - 52px); }
+.arborescence { flex: none; width: 265px; background: #f7f9fb; border-right: 1px solid var(--bord); padding: .5rem 0 2rem; font-size: .87rem; }
+.arborescence summary { cursor: pointer; padding: .35rem .7rem; font-weight: 600; color: var(--marine); list-style-position: inside; }
+.arborescence summary b { color: var(--accent); margin-right: .15rem; }
+.arborescence .noeud { display: flex; align-items: center; gap: .45rem; padding: .22rem .7rem .22rem 1.5rem; color: var(--texte); text-decoration: none; border-left: 3px solid transparent; }
+.arborescence .noeud.racine { padding-left: .7rem; font-weight: 600; margin-bottom: .2rem; }
+.arborescence .noeud:hover { background: #e9eef4; }
+.arborescence .noeud.actif { background: var(--accent-clair); border-left-color: var(--accent); }
+.arborescence .noeud .code { flex: none; width: 1.7rem; }
+.arborescence .noeud .libelle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contenu { flex: 1; min-width: 0; padding: 1rem 1.2rem 2rem; max-width: 1050px; }
+.fil { color: var(--discret); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 .2rem; }
+
+dialog { border: 1px solid var(--bord); border-radius: 8px; padding: 1.1rem; width: min(640px, 94vw); }
+dialog::backdrop { background: rgba(15, 30, 50, .45); }
+
+@media (max-width: 760px) {
+  .bandeau-dossier .menu { display: inline-block; }
+  .bandeau-dossier .client { margin-right: 0; flex: 1; }
+  .espace-travail { display: block; }
+  .arborescence { display: none; width: auto; border-right: 0; border-bottom: 1px solid var(--bord); }
+  .arborescence.ouverte { display: block; }
+  .contenu { padding: .8rem; }
+  .page { padding: .7rem; }
+}

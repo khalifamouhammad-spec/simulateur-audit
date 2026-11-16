@@ -1,0 +1,80 @@
+// Tableau de bord : liste des dossiers clients et création d'un dossier.
+import { SECTEURS, TAILLES, NIVEAUX, STATUTS_MISSION, REFERENTIELS, PHASE_COURANTE } from '../config.js';
+import { db, lireParametres } from '../db.js';
+import { creerDossier, avancement, dureeFr } from '../dossiers.js';
+import { echapper, dateFr } from '../utils.js';
+
+const options = (objet, texte = (v) => v.libelle || v) => Object.entries(objet).map(([k, v]) => `<option value="${k}">${echapper(texte(v))}</option>`).join('');
+
+export async function afficherTableauDeBord(vue) {
+  const [dossiers, parametres] = await Promise.all([db.tout('dossiers'), lireParametres()]);
+  dossiers.sort((a, b) => b.modifieLe.localeCompare(a.modifieLe));
+  const total = dossiers.reduce((s, d) => s + d.tempsSecondes, 0);
+
+  vue.innerHTML = `
+    <main class="page">
+      <div class="ligne espace">
+        <div><h1>Tableau de bord</h1><p class="discret">Dossiers clients du cabinet (clients fictifs d'entraînement).</p></div>
+        <button class="principal" data-nouveau>+ Nouveau dossier</button>
+      </div>
+      <div class="indicateurs">
+        <div class="indicateur"><span>Dossiers</span><strong>${dossiers.length}</strong></div>
+        <div class="indicateur"><span>Missions en cours</span><strong>${dossiers.filter((d) => d.statut !== 'cloturee').length}</strong></div>
+        <div class="indicateur"><span>Missions clôturées</span><strong>${dossiers.filter((d) => d.statut === 'cloturee').length}</strong></div>
+        <div class="indicateur"><span>Temps passé</span><strong>${dureeFr(total)}</strong></div>
+      </div>
+      <div class="panneau">
+        <div class="defilement"><table class="dense">
+          <thead><tr><th>Client</th><th>Exercice clos le</th><th>Secteur</th><th>Taille</th><th>Difficulté</th><th>Statut</th><th>Avancement</th><th class="nombre">Temps</th><th>Modifié le</th><th></th></tr></thead>
+          <tbody>${dossiers.map((d) => {
+            const pct = avancement(d);
+            const s = STATUTS_MISSION[d.statut];
+            return `<tr>
+              <td><a href="#/dossier/${d.id}"><strong>${echapper(d.client.nom)}</strong></a><br><span class="discret">${echapper(d.client.formeJuridique)}</span></td>
+              <td>${dateFr(d.exercice.cloture)}</td><td>${echapper(SECTEURS[d.parametres.secteur])}</td><td>${TAILLES[d.parametres.taille].libelle}</td>
+              <td>${NIVEAUX[d.parametres.difficulte].libelle}</td>
+              <td><span class="pastille ${s.classe}">${s.libelle}</span></td>
+              <td><div class="jauge" title="${pct} %"><i style="width:${pct}%"></i></div><span class="discret">${pct} %</span></td>
+              <td class="nombre">${dureeFr(d.tempsSecondes)}</td><td>${dateFr(d.modifieLe.slice(0, 10))}</td>
+              <td class="actions"><a class="bouton petit" href="#/dossier/${d.id}">Ouvrir</a> <button class="petit danger" data-supprimer="${d.id}">Supprimer</button></td></tr>`;
+          }).join('') || '<tr><td colspan="10" class="vide">Aucun dossier. Créez votre premier client avec « Nouveau dossier ».</td></tr>'}</tbody>
+        </table></div>
+      </div>
+      <p class="discret">Les dossiers sont enregistrés dans ce navigateur (IndexedDB). Version en cours de développement : phase ${PHASE_COURANTE} sur 7.</p>
+    </main>
+    <dialog>
+      <form method="dialog">
+        <h2>Nouveau dossier client</h2>
+        <div class="grille">
+          <div><label for="n-secteur">Secteur</label><select id="n-secteur">${options(SECTEURS)}</select></div>
+          <div><label for="n-taille">Taille</label><select id="n-taille">${options(TAILLES, (t) => `${t.libelle} — ${t.description}`)}</select></div>
+          <div><label for="n-difficulte">Difficulté</label><select id="n-difficulte">${options(NIVEAUX, (n) => `${n.libelle} — ${n.description}`)}</select></div>
+          <div><label for="n-anomalies">Nombre d'anomalies cachées</label><input type="number" id="n-anomalies" min="3" max="15" value="6" required></div>
+        </div>
+        <label for="n-extrait">Option : cas inspiré d'un vrai rapport</label>
+        <textarea id="n-extrait" placeholder="Collez un extrait de rapport (par exemple un point clé de l'audit). L'IA construira un client fictif sur ce modèle, sans aucun nom réel."></textarea>
+        <p class="discret">Référentiel : ${echapper(REFERENTIELS[parametres.referentiel].libelle)}. Le scénario et le FEC du client seront générés à partir de ces paramètres (phase 2) ; en attendant, le dossier porte un nom provisoire.</p>
+        <div class="ligne fin"><button type="button" data-annuler>Annuler</button><button class="principal" value="ok">Créer le dossier</button></div>
+      </form>
+    </dialog>`;
+
+  const dialogue = vue.querySelector('dialog');
+  vue.querySelector('[data-nouveau]').addEventListener('click', () => dialogue.showModal());
+  vue.querySelector('[data-annuler]').addEventListener('click', () => dialogue.close());
+  dialogue.querySelector('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = (id) => vue.querySelector('#' + id).value;
+    const dossier = await creerDossier({
+      secteur: v('n-secteur'), taille: v('n-taille'), difficulte: v('n-difficulte'),
+      nbAnomalies: Number(v('n-anomalies')), referentiel: parametres.referentiel, extraitRapport: v('n-extrait').trim(),
+    });
+    dialogue.close();
+    location.hash = `#/dossier/${dossier.id}`;
+  });
+  vue.querySelectorAll('[data-supprimer]').forEach((b) => b.addEventListener('click', async () => {
+    const d = dossiers.find((x) => x.id === b.dataset.supprimer);
+    if (!confirm(`Supprimer définitivement le dossier « ${d.client.nom} » et toutes ses données ?`)) return;
+    await db.supprimerDossier(d.id);
+    afficherTableauDeBord(vue);
+  }));
+}
