@@ -1,6 +1,6 @@
 // Générateur de cas hors-ligne (sans IA) pour le cycle trésorerie.
 // Produit un JSON brut au même format que l'IA : il passe donc par les mêmes contrôles.
-import { aleatoire, ajouterJours, dateFr } from '../utils.js';
+import { aleatoire, ajouterJours, dateFr, euro } from '../utils.js';
 
 const ENTREPRISES = [
   { nom: 'Menuiserie Valbois', secteur: 'Fabrication de menuiseries bois sur mesure', forme: 'SAS', effectif: 24, ca: 3200000,
@@ -138,7 +138,7 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       declarer('cheque_ancien', [op],
         `Le chèque n° ${num} émis le ${dateFr(d)} au profit de ${f} figure toujours en suspens au rapprochement, plus d'un an après son émission. Un chèque est prescrit un an après l'expiration du délai de présentation : il ne sera plus payé par la banque. La trésorerie est minorée à tort et la dette fournisseur doit être réexaminée.`,
         "Revue de l'ancienneté des suspens de l'état de rapprochement et contrôle de leur apurement sur les relevés postérieurs à la clôture (NEP 500, NEP 330).",
-        `Débit 512 Banque / Crédit 401 Fournisseurs pour ${op.montant} € (la dette renaît), ou crédit d'un produit exceptionnel si la dette est éteinte.`);
+        `Débit 512 Banque / Crédit 401 Fournisseurs pour ${euro(op.montant)} (la dette renaît), ou crédit d'un produit exceptionnel si la dette est éteinte.`);
     },
     suspens_ancien() {
       const d = ajouterJours(fin, -rnd.entier(120, 240));
@@ -146,7 +146,7 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       declarer('suspens_ancien', [op],
         `Une remise de chèques comptabilisée le ${dateFr(d)} n'a jamais été créditée par la banque. Une remise est normalement créditée sous quelques jours : chèque égaré, impayé non comptabilisé ou encaissement fictif. La trésorerie est surévaluée et la créance client n'est en réalité pas soldée.`,
         "Analyse de l'ancienneté des suspens du rapprochement, obtention du bordereau de remise tamponné par la banque et suivi de l'apurement sur les relevés postérieurs (NEP 500).",
-        `Débit 411 Clients (ou 416 Clients douteux avec dépréciation) / Crédit 512 Banque pour ${op.montant} €.`);
+        `Débit 411 Clients (ou 416 Clients douteux avec dépréciation) / Crédit 512 Banque pour ${euro(op.montant)}.`);
     },
     virement_non_comptabilise() {
       const client = rnd.choix(CLIENTS);
@@ -155,7 +155,7 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       declarer('virement_non_comptabilise', [op],
         `Le virement reçu de ${client} le ${dateFr(d)} figure sur le relevé mais n'a pas été comptabilisé à la clôture. La trésorerie est sous-évaluée et la créance client surévaluée du même montant.`,
         "Pointage du relevé bancaire avec le grand livre 512 et examen des éléments en rapprochement « à comptabiliser » (NEP 500).",
-        `Débit 512 Banque / Crédit 411 Clients pour ${op.montant} €.`);
+        `Débit 512 Banque / Crédit 411 Clients pour ${euro(op.montant)}.`);
     },
     frais_non_comptabilises() {
       const d = jour(12, rnd.entier(27, 31));
@@ -163,7 +163,7 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       declarer('frais_non_comptabilises', [op],
         `Les intérêts et commissions prélevés par la banque le ${dateFr(d)} ne sont pas comptabilisés à la clôture. Les charges de l'exercice et le solde de banque sont inexacts.`,
         "Pointage exhaustif des débits du relevé de décembre avec le grand livre et rapprochement avec l'échelle d'intérêts (NEP 500).",
-        `Débit 627 Services bancaires (et 661 Charges d'intérêts pour les agios) / Crédit 512 Banque pour ${op.montant} €.`);
+        `Débit 627 Services bancaires (et 661 Charges d'intérêts pour les agios) / Crédit 512 Banque pour ${euro(op.montant)}.`);
     },
     double_comptabilisation() {
       const candidats = operations.filter((o) => o.sens === 'encaissement' && o.date_compta >= debut && o.date_compta < jour(12, 27) && o.date_banque && o.date_banque <= fin);
@@ -172,9 +172,9 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       const op = ajouter({ ...origine, id: undefined, date_compta: ajouterJours(origine.date_compta, rnd.entier(1, 3)), date_banque: null });
       op.id = 'OP' + String(n).padStart(3, '0');
       declarer('double_comptabilisation', [op],
-        `L'encaissement « ${origine.libelle} » de ${origine.montant} € est comptabilisé deux fois (le ${dateFr(origine.date_compta)} et le ${dateFr(op.date_compta)}) alors que la banque ne l'a crédité qu'une fois. La trésorerie est surévaluée et la créance client soldée à tort.`,
+        `L'encaissement « ${origine.libelle} » de ${euro(origine.montant)} est comptabilisé deux fois (le ${dateFr(origine.date_compta)} et le ${dateFr(op.date_compta)}) alors que la banque ne l'a crédité qu'une fois. La trésorerie est surévaluée et la créance client soldée à tort.`,
         "Recherche de doublons (même montant, même tiers) dans le grand livre 512 et analyse des encaissements en suspens au rapprochement non crédités après la clôture (NEP 500).",
-        `Débit 411 Clients / Crédit 512 Banque pour ${origine.montant} € (annulation du doublon).`);
+        `Débit 411 Clients / Crédit 512 Banque pour ${euro(origine.montant)} (annulation du doublon).`);
     },
     cut_off() {
       const client = rnd.choix(CLIENTS);
@@ -183,7 +183,7 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       declarer('cut_off', [op],
         `Le virement de ${client} reçu le ${dateFr(jb)} a été comptabilisé au 31/12. Un virement n'a pas de délai d'encaissement de plusieurs jours : l'opération appartient à l'exercice suivant. La trésorerie de clôture est surévaluée et les créances clients sous-évaluées (habillage de bilan possible).`,
         "Test de césure : rapprochement des derniers mouvements comptabilisés en décembre avec les relevés de janvier N+1 et les avis d'opération (NEP 500, NEP 240 en cas d'intention).",
-        `Débit 411 Clients / Crédit 512 Banque pour ${op.montant} € au 31/12 ; l'encaissement est à constater en N+1.`);
+        `Débit 411 Clients / Crédit 512 Banque pour ${euro(op.montant)} au 31/12 ; l'encaissement est à constater en N+1.`);
     },
     erreur_montant() {
       // Inversion de deux chiffres à la saisie (ex. 12 340 au lieu de 13 240) : écart de 900 €.
@@ -194,9 +194,9 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       const d = jour(12, rnd.entier(4, 18));
       const op = ajouter({ libelle: `Chèque n° ${num} ${f}`, libelle_banque: `CHEQUE ${num}`, piece: `CHQ ${num}`, sens: 'decaissement', montant: mCompta, montant_banque: mCompta + ecartInv, date_compta: d, date_banque: ajouterJours(d, 5), contrepartie: '401', contrepartie_libelle: 'Fournisseurs' });
       declarer('erreur_montant', [op],
-        `Le chèque n° ${num} est comptabilisé pour ${op.montant} € alors que la banque l'a débité pour ${op.montant_banque} € (erreur de saisie : écart de ${ecartInv} €, multiple de 9 typique d'une inversion de chiffres). Cet écart explique tout ou partie de l'écart du rapprochement.`,
+        `Le chèque n° ${num} est comptabilisé pour ${euro(op.montant)} alors que la banque l'a débité pour ${euro(op.montant_banque)} (erreur de saisie : écart de ${euro(ecartInv)}, multiple de 9 typique d'une inversion de chiffres). Cet écart explique tout ou partie de l'écart du rapprochement.`,
         "Pointage ligne à ligne grand livre / relevé et examen de la souche ou de la copie du chèque (NEP 500).",
-        `Débit 401 Fournisseurs / Crédit 512 Banque pour ${ecartInv} € (complément).`);
+        `Débit 401 Fournisseurs / Crédit 512 Banque pour ${euro(ecartInv)} (complément).`);
     },
     rapprochement_faux() {
       const d = jour(12, rnd.entier(6, 22));
@@ -206,7 +206,7 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       declarer('rapprochement_faux', [op],
         `L'état de rapprochement du client ne boucle pas : il présente un écart non justifié${niveau === 'confirme' ? ' masqué sous une ligne « régularisation en cours »' : ''}. Il provient notamment du prélèvement du ${dateFr(d)} présent sur le relevé, ni comptabilisé ni repris en rapprochement. Un rapprochement qui ne boucle pas ne justifie pas le solde de banque.`,
         "Contrôle arithmétique de l'état de rapprochement, validation des soldes avec le grand livre et le relevé (ou la confirmation bancaire, NEP 505), puis pointage exhaustif pour expliquer l'écart.",
-        `Débit 6122 Crédit-bail mobilier / Crédit 512 Banque pour ${op.montant} €, puis rapprochement à refaire.`);
+        `Débit 6122 Crédit-bail mobilier / Crédit 512 Banque pour ${euro(op.montant)}, puis rapprochement à refaire.`);
     },
     beneficiaire_inhabituel() {
       const b = rnd.choix(BENEFICIAIRES);
@@ -214,7 +214,7 @@ export function genererCasHorsLigne({ niveau = 'debutant', graine = Date.now() }
       const montant = niveau === 'confirme' ? arrondi(Math.round(echelle / 500) * 500 + 480) : Math.max(5000, Math.round(echelle / 5000) * 5000);
       const op = ajouter({ libelle: `Virement émis ${b} - prestation`, libelle_banque: `VIR INTL ${b}`, piece: 'Sans facture', sens: 'decaissement', montant, date_compta: d, date_banque: d, contrepartie: '6226', contrepartie_libelle: 'Honoraires' });
       declarer('beneficiaire_inhabituel', [op],
-        `Virement de ${op.montant} € émis le ${dateFr(d)} vers ${b}, tiers absent des fournisseurs habituels, sans facture et en toute fin d'exercice. L'opération présente des caractéristiques de risque de fraude (détournement, charge fictive).`,
+        `Virement de ${euro(op.montant)} émis le ${dateFr(d)} vers ${b}, tiers absent des fournisseurs habituels, sans facture et en toute fin d'exercice. L'opération présente des caractéristiques de risque de fraude (détournement, charge fictive).`,
         "Revue des décaissements significatifs ou inhabituels, obtention de la facture, du contrat et de l'autorisation, vérification de l'existence du tiers et du RIB (NEP 240, NEP 500).",
         "Pas de correction automatique : à défaut de justificatif, reclasser en compte d'attente 467 / débiteurs divers et apprécier la dépréciation ; informer la direction, voire la gouvernance.");
     },
