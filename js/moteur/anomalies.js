@@ -68,11 +68,11 @@ export const BIBLIOTHEQUE = {
     procedure: "Analyse de la balance âgée clients, revue des encaissements postérieurs à la clôture et des relances, appréciation des dépréciations (NEP 500, NEP 540).",
     injecter(o, inj) {
       const n = o.rnd.entier(2, 3);
-      const candidates = o.ventes.filter((v) => v.reglement && v.date < o.iso(o.annee, 4, 30));
+      const candidates = o.ventes.filter((v) => v.reglement && !v.verrou && v.date < o.iso(o.annee, 4, 30));
       const choisies = [];
       for (let i = 0; i < n; i++) { const v = proche(candidates.filter((x) => !choisies.includes(x)), inj.echelle / n, (x) => x.ht); if (v) choisies.push(v); }
       if (!choisies.length) return null;
-      choisies.forEach((v) => { o.annulerReglement(v); v.e.bloque = true; });
+      choisies.forEach((v) => { o.annulerReglement(v); v.e.bloque = true; v.verrou = true; });
       const total = somme(choisies, (v) => v.ht);
       return { ecritures: choisies.map((v) => v.e), comptes: ['411000'], montant: total, impactResultat: -total,
         explication: `${choisies.length} factures du premier quadrimestre (${choisies.map((v) => `${v.piece} ${v.client.nom}`).join(' ; ')}) restent impayées à la clôture, soit plus de 240 jours de retard, sans dépréciation ni encaissement postérieur. Créances HT concernées : ${E(total)}.`,
@@ -98,11 +98,12 @@ export const BIBLIOTHEQUE = {
     libelle: "Solde client créditeur anormal (encaissement imputé au mauvais client)", cycle: 'ventes', assertion: 'Classification',
     procedure: "Revue des soldes clients créditeurs et des comptes non lettrés, rapprochement des encaissements avec les avis de virement (NEP 500).",
     injecter(o, inj) {
-      const v = proche(o.ventes.filter((x) => x.reglement), inj.echelle, (x) => x.ttc);
+      const v = proche(o.ventes.filter((x) => x.reglement && !x.verrou), inj.echelle, (x) => x.ttc);
       const autre = o.tiers.clients.find((c) => c !== v?.client && !o.ventes.some((x) => x.client === c && !x.reglement));
       if (!v || !autre) return null;
       const ligne = v.reglement.lignes[1];
       ligne.t = autre;
+      v.verrou = true;
       for (const l of [ligne, v.e.lignes[0]]) { l.l = ''; l.dl = ''; }
       return { ecritures: [v.reglement, v.e], comptes: ['411000'], montant: v.ttc, impactResultat: 0,
         explication: `L'encaissement de la facture ${v.piece} (${v.client.nom}, ${E(v.ttc)}) a été imputé sur le compte de ${autre.nom}, qui présente un solde créditeur anormal, tandis que la facture de ${v.client.nom} apparaît impayée. Sans incidence sur le résultat, mais les créances et les dettes sont mal présentées et le client risque d'être relancé ou déprécié à tort.`,
@@ -128,8 +129,9 @@ export const BIBLIOTHEQUE = {
     libelle: "Facture fournisseur payée deux fois", cycle: 'achats', assertion: 'Réalité',
     procedure: "Recherche de doublons de règlement (même tiers, même montant), revue des soldes fournisseurs débiteurs, circularisation des fournisseurs (NEP 500, NEP 505).",
     injecter(o, inj) {
-      const a = proche(o.achats.filter((x) => x.reglement && x.echeance < o.iso(o.annee, 12, 5)), inj.echelle, (x) => x.ttc);
+      const a = proche(o.achats.filter((x) => x.reglement && !x.verrou && x.echeance < o.iso(o.annee, 12, 5)), inj.echelle, (x) => x.ttc);
       if (!a) return null;
+      a.verrou = true;
       const date = o.jourOuvre(ajouterJours(a.echeance, o.rnd.entier(4, 10)));
       const e = o.livre.ajouter({ journal: 'BQ', date, piece: o.livre.numero('VIR'), lib: a.reglement.lib, lignes: [o.L('401000', a.ttc, 0, a.fournisseur), o.L('512000', 0, a.ttc)] });
       e.bloque = true;
@@ -142,8 +144,9 @@ export const BIBLIOTHEQUE = {
     libelle: "Facture d'achat comptabilisée deux fois", cycle: 'achats', assertion: 'Réalité',
     procedure: "Recherche de doublons au journal des achats (même fournisseur, même référence de pièce, même montant), circularisation des fournisseurs (NEP 500, NEP 505).",
     injecter(o, inj) {
-      const a = proche(o.achats.filter((x) => x.date < o.iso(o.annee, 12, 1) && x.ht > 0), inj.echelle, (x) => x.ht);
+      const a = proche(o.achats.filter((x) => !x.verrou && x.date < o.iso(o.annee, 12, 1) && x.ht > 0), inj.echelle, (x) => x.ht);
       if (!a) return null;
+      a.verrou = true;
       const date = o.jourOuvre(ajouterJours(a.date, o.rnd.entier(4, 14)));
       const e = o.livre.ajouter({ journal: 'AC', date, piece: a.piece, pieceDate: a.date, lib: a.e.lib, lignes: a.e.lignes.map((l) => o.L(l.c, l.d, l.k, l.t)) });
       e.bloque = true;
@@ -290,7 +293,7 @@ export const BIBLIOTHEQUE = {
       const cible = inj.echelle * 0.4;
       const choisies = [];
       let total = 0;
-      for (const v of o.rnd.melanger(o.ventes.filter((x) => x.date >= o.iso(o.annee, 6, 1) && x.date < o.iso(o.annee, 12, 1) && x.tva > 0))) {
+      for (const v of o.rnd.melanger(o.ventes.filter((x) => !x.verrou && x.date >= o.iso(o.annee, 6, 1) && x.date < o.iso(o.annee, 12, 1) && x.tva > 0))) {
         if (total >= cible || choisies.length >= 6) break;
         if (v.tva > cible) continue;
         v.e.lignes = v.e.lignes.filter((l) => l.c !== '445710');
@@ -298,6 +301,7 @@ export const BIBLIOTHEQUE = {
         if (v.reglement) { v.reglement.lignes[0].d = v.ht; v.reglement.lignes[1].k = v.ht; }
         total += v.tva;
         v.ttc = v.ht;
+        v.verrou = true;
         choisies.push(v);
       }
       if (!choisies.length) return null;

@@ -2,7 +2,7 @@
 
 Simulateur de missions d'audit légal pour s'entraîner sur des cas réalistes.
 
-Logiciel d'audit d'entraînement (dossier, feuilles de travail, programmes, revue, rapport) sur des clients fictifs dotés d'un FEC. Développement par phases : **phases 1 (socle), 2 (moteur FEC) et 3 (planification) terminées**.
+Logiciel d'audit d'entraînement (dossier, feuilles de travail, programmes, revue, rapport) sur des clients fictifs dotés d'un FEC. Développement par phases : **phases 1 à 4 terminées** (socle, moteur FEC, planification, cycle trésorerie et ajustements).
 
 Le premier simulateur (cycle trésorerie seul) reste disponible dans [`v1/`](v1/).
 
@@ -23,6 +23,7 @@ La clé API Groq se saisit dans **Paramètres** ; elle est stockée uniquement d
 ```bash
 node tests/test-fec.mjs
 node tests/test-analytique.mjs
+node tests/test-banque.mjs
 ```
 
 Génère des clients pour tous les secteurs, tailles et difficultés et contrôle : écritures équilibrées, numérotation continue, lettrage, bilan équilibré, résultat identique au bilan et au compte de résultat, à-nouveaux de N égaux à la clôture de N-1, export réglementaire.
@@ -53,6 +54,13 @@ Génère des clients pour tous les secteurs, tailles et difficultés et contrôl
 | `js/sections/planification.js` | Fiche client, indépendance, lettre de mission, fiche entreprise, matrice des risques, seuils | 3 |
 | `js/sections/controle-interne.js` | Questionnaires de contrôle interne, réponses du client simulées | 3 |
 | `js/sections/revue-analytique.js` | Revue analytique à commenter | 3 |
+| `js/moteur/banque.js` | Relevés bancaires et état de rapprochement reconstruits à partir du FEC | 4 |
+| `js/moteur/pieces.js` | Pièces justificatives construites à partir des écritures | 4 |
+| `js/moteur/echantillon.js` | Échantillonnage aléatoire, par unités monétaires, montants élevés | 4 |
+| `js/cycles/` | Configuration de chaque cycle (comptes, programme de travail) | 4 et 6 |
+| `js/sections/cycle.js` | Écran d'un cycle : programme, feuilles de travail, grand livre, banque, pièces | 4 |
+| `js/sections/ajustements.js` | Tableau des ajustements proposés | 4 |
+| `js/feuilles.js` | Feuilles de travail et pièces (stockage) | 4 |
 | `js/moteur/compta.js` | Contrôles d'équilibre, balance, bilan, compte de résultat | 2 |
 | `js/moteur/export-fec.js` | Export `.txt` (tabulations, 18 colonnes) | 2 |
 | `js/sections/` | Un module par section du dossier (A à H) | 3 à 7 |

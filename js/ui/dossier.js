@@ -7,6 +7,9 @@ import { afficherFec, afficherBalance, afficherEtats } from '../sections/donnees
 import { afficherFicheClient, afficherIndependance, afficherLettreMission, afficherFicheEntreprise, afficherMatriceRisques, afficherSeuils } from '../sections/planification.js';
 import { afficherControleInterne } from '../sections/controle-interne.js';
 import { afficherRevueAnalytique } from '../sections/revue-analytique.js';
+import { ecranCycle } from '../sections/cycle.js';
+import { afficherAjustements } from '../sections/ajustements.js';
+import { TRESORERIE } from '../cycles/tresorerie.js';
 import { echapper, dateFr, euro, variationPct, pctFr } from '../utils.js';
 
 // Écrans fonctionnels, par code d'élément. Les autres affichent leur contenu prévu.
@@ -15,6 +18,8 @@ const ECRANS = {
   A1: afficherFicheClient, A2: afficherIndependance, A3: afficherLettreMission,
   B1: afficherFicheEntreprise, B2: afficherControleInterne, B3: afficherRevueAnalytique, B4: afficherMatriceRisques,
   C1: afficherSeuils,
+  D1: ecranCycle(TRESORERIE),
+  E1: afficherAjustements,
 };
 
 const pastille = (statut) => `<span class="pastille ${STATUTS[statut].classe}">${STATUTS[statut].libelle}</span>`;

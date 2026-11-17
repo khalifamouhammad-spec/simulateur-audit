@@ -166,3 +166,22 @@ tr.significatif td { background: var(--orange-clair) !important; }
 .onglets button.actif { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
 .lettre { font-family: Georgia, "Times New Roman", serif; font-size: .95rem; min-height: 32rem; line-height: 1.55; }
 @media print { .barre-app, .bandeau-dossier, .arborescence, button, .message { display: none !important; } .contenu { padding: 0; } }
+
+/* Phase 4 : cycles, feuilles de travail, pièces, ajustements */
+.pastille.rouge { background: var(--rouge-clair); color: var(--rouge); }
+dialog.large { width: min(860px, 96vw); }
+.barre-panier { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: space-between; margin-top: .8rem; padding: .55rem .8rem; background: var(--marine); color: #fff; border-radius: 6px; }
+.barre-panier select { width: auto; max-width: 220px; }
+table.dense tr.cochee td { background: var(--orange-clair) !important; }
+.filtres.sondage { align-items: flex-end; margin: .6rem 0 0; padding-top: .6rem; border-top: 1px solid var(--bord); }
+label.en-ligne.puce { font-weight: 400; border: 1px solid var(--bord); border-radius: 12px; padding: .1rem .55rem; background: #fff; }
+.deux-colonnes { display: grid; grid-template-columns: minmax(200px, 280px) 1fr; gap: .8rem; align-items: start; }
+.liste-pieces { max-height: 70vh; overflow: auto; margin: 0; }
+.liste-pieces a { display: block; padding: .45rem .7rem; border-bottom: 1px solid #e8ecf1; color: var(--texte); text-decoration: none; font-size: .86rem; border-left: 3px solid transparent; }
+.liste-pieces a.actif { background: var(--accent-clair); border-left-color: var(--accent); }
+.piece { background: #fffdf8; border: 1px solid #d9d2c0; border-radius: 4px; padding: 1.2rem 1.4rem; box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
+.piece h2 { margin: 1rem 0 .2rem; font-size: 1.1rem; }
+.piece table { margin: .6rem 0; background: transparent; }
+.piece .annexe { margin-top: .7rem; padding: .5rem .7rem; border-left: 3px solid #b9ad8e; background: #f6f1e3; font-size: .9rem; }
+td.ecriture { font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .deux-colonnes { grid-template-columns: 1fr; } .liste-pieces { max-height: 30vh; } td.ecriture { white-space: normal; } }
