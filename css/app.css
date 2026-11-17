@@ -185,3 +185,20 @@ label.en-ligne.puce { font-weight: 400; border: 1px solid var(--bord); border-ra
 .piece .annexe { margin-top: .7rem; padding: .5rem .7rem; border-left: 3px solid #b9ad8e; background: #f6f1e3; font-size: .9rem; }
 td.ecriture { font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) { .deux-colonnes { grid-template-columns: 1fr; } .liste-pieces { max-height: 30vh; } td.ecriture { white-space: normal; } }
+
+/* Phase 5 : correction et historique */
+.lecture-seule input:disabled, .lecture-seule textarea:disabled, .lecture-seule select:disabled { background: #f1f3f6; color: var(--texte); opacity: 1; }
+.note-globale { font-size: 2.6rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.note-globale.vert { color: var(--vert); }
+.note-globale.orange { color: var(--orange); }
+.note-globale.rouge { color: var(--rouge); }
+ul.constats { margin: 0; padding-left: 1rem; font-size: .84rem; }
+p.avis { margin: .35rem 0 0; font-size: .86rem; padding: .35rem .5rem; background: var(--accent-clair); border-radius: 4px; }
+.bloc-anomalie { background: var(--panneau); border: 1px solid var(--bord); border-left: 4px solid var(--bord); border-radius: 6px; padding: .6rem .9rem; margin: .6rem 0; }
+.bloc-anomalie.ok { border-left-color: var(--vert); }
+.bloc-anomalie.moyen { border-left-color: #e39a12; }
+.bloc-anomalie.ko { border-left-color: var(--rouge); }
+details.panneau summary { cursor: pointer; font-weight: 600; }
+.deux-colonnes.egales { grid-template-columns: 1fr 1fr; }
+.message.ligne { display: flex; }
+@media (max-width: 760px) { .deux-colonnes.egales { grid-template-columns: 1fr; } }

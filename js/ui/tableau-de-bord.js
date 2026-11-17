@@ -25,7 +25,7 @@ export async function afficherTableauDeBord(vue) {
       </div>
       <div class="panneau">
         <div class="defilement"><table class="dense">
-          <thead><tr><th>Client</th><th>Exercice clos le</th><th>Secteur</th><th>Taille</th><th>Difficulté</th><th>Statut</th><th>Avancement</th><th class="nombre">Temps</th><th>Modifié le</th><th></th></tr></thead>
+          <thead><tr><th>Client</th><th>Exercice clos le</th><th>Secteur</th><th>Taille</th><th>Difficulté</th><th>Statut</th><th class="nombre">Note</th><th>Avancement</th><th class="nombre">Temps</th><th>Modifié le</th><th></th></tr></thead>
           <tbody>${dossiers.map((d) => {
             const pct = avancement(d);
             const s = STATUTS_MISSION[d.statut];
@@ -34,10 +34,11 @@ export async function afficherTableauDeBord(vue) {
               <td>${dateFr(d.exercice.cloture)}</td><td>${echapper(SECTEURS[d.parametres.secteur])}</td><td>${TAILLES[d.parametres.taille].libelle}</td>
               <td>${NIVEAUX[d.parametres.difficulte].libelle}</td>
               <td><span class="pastille ${s.classe}">${s.libelle}</span></td>
+              <td class="nombre">${d.correction ? `<a href="#/dossier/${d.id}/H1">${String(d.correction.globale).replace('.', ',')} / 20</a>` : '—'}</td>
               <td><div class="jauge" title="${pct} %"><i style="width:${pct}%"></i></div><span class="discret">${pct} %</span></td>
               <td class="nombre">${dureeFr(d.tempsSecondes)}</td><td>${dateFr(d.modifieLe.slice(0, 10))}</td>
               <td class="actions"><a class="bouton petit" href="#/dossier/${d.id}">Ouvrir</a> <button class="petit danger" data-supprimer="${d.id}">Supprimer</button></td></tr>`;
-          }).join('') || '<tr><td colspan="10" class="vide">Aucun dossier. Créez votre premier client avec « Nouveau dossier ».</td></tr>'}</tbody>
+          }).join('') || '<tr><td colspan="11" class="vide">Aucun dossier. Créez votre premier client avec « Nouveau dossier ».</td></tr>'}</tbody>
         </table></div>
       </div>
       <p class="discret">Les dossiers sont enregistrés dans ce navigateur (IndexedDB). Version en cours de développement : phase ${PHASE_COURANTE} sur 7.</p>

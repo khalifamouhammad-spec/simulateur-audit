@@ -10,6 +10,7 @@ import { afficherRevueAnalytique } from '../sections/revue-analytique.js';
 import { ecranCycle } from '../sections/cycle.js';
 import { afficherAjustements } from '../sections/ajustements.js';
 import { TRESORERIE } from '../cycles/tresorerie.js';
+import { afficherCorrection } from '../sections/correction.js';
 import { echapper, dateFr, euro, variationPct, pctFr } from '../utils.js';
 
 // Écrans fonctionnels, par code d'élément. Les autres affichent leur contenu prévu.
@@ -20,6 +21,7 @@ const ECRANS = {
   C1: afficherSeuils,
   D1: ecranCycle(TRESORERIE),
   E1: afficherAjustements,
+  H1: afficherCorrection,
 };
 
 const pastille = (statut) => `<span class="pastille ${STATUTS[statut].classe}">${STATUTS[statut].libelle}</span>`;
@@ -136,6 +138,7 @@ function afficherSynthese(contenu, dossier) {
   const ligne = (libelle, cle) => `<tr><td>${libelle}</td><td class="nombre">${euro(n[cle])}</td><td class="nombre">${euro(n1[cle])}</td><td class="nombre">${pctFr(variationPct(n[cle], n1[cle]))}</td></tr>`;
   contenu.innerHTML = `
     <h1>Synthèse du dossier</h1>
+    ${dossier.statut === 'cloturee' && dossier.correction ? `<div class="message succes ligne espace"><span>Mission clôturée — note globale <strong>${String(dossier.correction.globale).replace('.', ',')} / 20</strong>. Le dossier est en consultation seule.</span><a class="bouton" href="#/dossier/${dossier.id}/H1">Voir le corrigé</a></div>` : ''}
     <div class="indicateurs">
       <div class="indicateur"><span>Secteur</span><strong>${echapper(SECTEURS[p.secteur])}</strong></div>
       <div class="indicateur"><span>Taille</span><strong>${TAILLES[p.taille].libelle} · ${c.effectif} salariés</strong></div>
@@ -161,7 +164,8 @@ function afficherSynthese(contenu, dossier) {
           <tr><td>Lignes de FEC</td><td class="nombre">${n.nbLignes.toLocaleString('fr-FR')}</td><td class="nombre">${n1.nbLignes.toLocaleString('fr-FR')}</td><td></td></tr></tbody>
       </table></div>
     </div>
-    <p><a class="bouton" href="#/dossier/${dossier.id}/X1">Consulter le FEC</a> <a class="bouton" href="#/dossier/${dossier.id}/X3">États financiers et contrôles</a></p>
+    <p><a class="bouton" href="#/dossier/${dossier.id}/X1">Consulter le FEC</a> <a class="bouton" href="#/dossier/${dossier.id}/X3">États financiers et contrôles</a>
+      ${dossier.statut === 'cloturee' ? '' : `<a class="bouton" href="#/dossier/${dossier.id}/H1">Clôturer la mission…</a>`}</p>
     ${p.extraitRapport ? `<div class="panneau"><h2>Extrait de rapport ayant servi de modèle</h2><p class="discret">${echapper(p.extraitRapport)}</p></div>` : ''}
     <div class="panneau serre">
       <h2 class="titre-tableau">État d'avancement</h2>
@@ -190,14 +194,17 @@ async function afficherElement(contenu, dossier, element, sauver, sauverDiffere)
     if (!dossier.scenario) { contenu.insertAdjacentHTML('beforeend', `<p class="message info">Le client n'est pas encore généré : rendez-vous sur la <a href="#/dossier/${dossier.id}">synthèse du dossier</a>.</p>`); return; }
     const zone = document.createElement('fieldset');
     zone.className = 'ecran';
-    zone.disabled = cloturee && element.suivi;
     contenu.append(zone);
     // « modifie » : à appeler à chaque saisie ; passe l'élément « en cours » et enregistre en différé.
     const modifie = () => {
       if (etat && etat.statut === 'a_faire') { etat.statut = 'en_cours'; contenu.querySelector('[data-statut]').value = 'en_cours'; }
       sauverDiffere();
     };
+    // Mission clôturée : consultation seule. Seules les commandes de navigation (onglets, filtres) restent actives.
+    const verrouiller = () => zone.querySelectorAll('input, textarea, select, button').forEach((el) => { if (!el.matches('[data-onglet], [data-vue], [data-g], [data-retour], [data-f]')) el.disabled = true; });
+    if (cloturee && element.suivi) { zone.classList.add('lecture-seule'); new MutationObserver(verrouiller).observe(zone, { childList: true, subtree: true }); }
     await ecran(zone, { dossier, sauver, sauverDiffere, modifie, lectureSeule: cloturee, donnees: etat ? (etat.donnees ??= {}) : null });
+    if (cloturee && element.suivi) verrouiller();
     return;
   }
   contenu.insertAdjacentHTML('beforeend', `

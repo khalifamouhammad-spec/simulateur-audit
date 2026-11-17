@@ -1,0 +1,285 @@
+// Correction d'une mission clôturée. Calcul entièrement fait par le code, à partir de ce que
+// l'auditeur a saisi et du corrigé caché. L'IA ne fait que commenter (voir commenterParIA).
+//
+// Périmètre noté (phase 5) : les anomalies du cycle trésorerie et toutes celles qui passent par
+// le journal de banque, détectables avec les outils du cycle D1. Les autres sont affichées
+// « hors périmètre » tant que leur cycle n'est pas disponible.
+import { CYCLES, ASSERTIONS, REFERENTIELS } from './config.js';
+import { TRESORERIE } from './cycles/tresorerie.js';
+import { impactResultat, equilibre } from './sections/ajustements.js';
+import { demanderJSON } from './groq.js';
+import { euro, lireNombre } from './utils.js';
+
+export const CYCLES_NOTES = ['tresorerie'];
+export const PONDERATIONS = { detection: 0.4, travaux: 0.25, planification: 0.2, seuils: 0.15 };
+export const SECTIONS = {
+  detection: 'Détection des anomalies et ajustements (E1)',
+  travaux: 'Travaux sur le cycle trésorerie (D1)',
+  planification: 'Planification : acceptation, prise de connaissance, risques (A, B)',
+  seuils: 'Seuils de signification (C1)',
+};
+
+const arrondi = (n) => Math.round(n * 10) / 10;
+const borne = (n) => Math.max(0, Math.min(20, arrondi(n)));
+const rempli = (t, min = 1) => typeof t === 'string' && t.trim().length >= min;
+
+export const dansPerimetre = (a) => CYCLES_NOTES.includes(a.cycle) || a.ecritures.some((e) => e.journal === 'BQ');
+
+// ------------------------------------------------------------------ Rapprochement saisies / corrigé
+/** Clés des lignes qui « portent » une anomalie (écritures du FEC, lignes des documents bancaires). */
+function clesAnomalie(a, donnees) {
+  const cles = new Set(a.ecritures.map((e) => `fec|${e.exercice}|${e.num}`));
+  if (a.type === 'frais_bancaires_non_comptabilises') {
+    (donnees?.banque?.nonComptabilises || []).forEach((_, i) => cles.add(`banque|NC-${i}`));
+    cles.add('banque|ecart');
+  }
+  if (a.type === 'cheque_ancien') (donnees?.banque?.chequesNonDebites || []).forEach((_, i) => cles.add(`banque|CHQ-ANCIEN-${i}`));
+  return cles;
+}
+/** Clé d'une ligne référencée par un ajustement (voir sections/cycle.js). */
+function cleReference(r) {
+  const num = String(r.num || '');
+  if (r.source === 'fec') return `fec|${r.exercice || 'N'}|${num}`;
+  if (/^R-/.test(num)) return `fec|N|${num.slice(2)}`;
+  if (/^[A-Z]{2}\d{6}$/.test(num)) return `fec|N|${num}`;
+  return `banque|${num}`;
+}
+const proche = (x, cible, tolerance) => Math.abs(Math.abs(x) - Math.abs(cible)) <= Math.max(1, Math.abs(cible) * tolerance);
+const debitTotal = (aj) => equilibre(aj).debit;
+/** L'ajustement chiffre-t-il correctement l'anomalie ? */
+function chiffrageCorrect(aj, a) {
+  return a.impactResultat ? proche(impactResultat(aj), a.impactResultat, 0.1) : proche(debitTotal(aj), a.montant, 0.1);
+}
+
+export function comparer(anomalies, ajustements, donnees) {
+  const lien = new Map(anomalies.map((a) => [a.id, []]));
+  const utilises = new Set();
+  // 1) Par les lignes sélectionnées
+  for (const a of anomalies) {
+    const cles = clesAnomalie(a, donnees);
+    for (const aj of ajustements) if ((aj.references || []).some((r) => cles.has(cleReference(r)))) { lien.get(a.id).push(aj.id); utilises.add(aj.id); }
+  }
+  // 2) À défaut, par le montant (ajustement saisi directement dans E1)
+  for (const a of anomalies) {
+    if (lien.get(a.id).length) continue;
+    const aj = ajustements.find((x) => !utilises.has(x.id) && (a.impactResultat ? proche(impactResultat(x), a.impactResultat, 0.05) : proche(debitTotal(x), a.montant, 0.05)));
+    if (aj) { lien.get(a.id).push(aj.id); utilises.add(aj.id); }
+  }
+  const parId = new Map(ajustements.map((x) => [x.id, x]));
+  return {
+    resultats: anomalies.map((a) => {
+      const ajs = lien.get(a.id).map((id) => parId.get(id));
+      return { anomalieId: a.id, perimetre: dansPerimetre(a), trouvee: ajs.length > 0, ajustements: ajs.map((x) => x.id), chiffrage: ajs.some((x) => chiffrageCorrect(x, a)), decision: ajs[0]?.decision || null };
+    }),
+    faussesAlertes: ajustements.filter((x) => !utilises.has(x.id)).map((x) => x.id),
+  };
+}
+
+// ------------------------------------------------------------------ Notes par section
+function noterDetection(anomalies, comparaison, ajustements) {
+  const constats = [];
+  const res = comparaison.resultats.filter((r) => r.perimetre);
+  const trouvees = res.filter((r) => r.trouvee);
+  const fa = comparaison.faussesAlertes.length;
+  let note;
+  if (!res.length) {
+    note = 20 - 2 * fa;
+    constats.push("Aucune anomalie du périmètre noté dans ce dossier : seule l'absence de fausse alerte est appréciée.");
+  } else {
+    note = (16 * trouvees.length) / res.length + (4 * trouvees.filter((r) => r.chiffrage).length) / res.length - 2 * fa;
+    constats.push(`${trouvees.length} anomalie(s) trouvée(s) sur ${res.length} dans le périmètre noté.`);
+    const malChiffrees = trouvees.filter((r) => !r.chiffrage).length;
+    if (malChiffrees) constats.push(`${malChiffrees} anomalie(s) trouvée(s) mais mal chiffrée(s) : l'incidence de l'écriture de correction s'écarte de plus de 10 % du bon montant.`);
+  }
+  if (fa) constats.push(`${fa} fausse(s) alerte(s) : ajustement(s) ne correspondant à aucune anomalie (−2 points chacune).`);
+  const horsPerimetre = comparaison.resultats.filter((r) => !r.perimetre && r.trouvee).length;
+  if (horsPerimetre) constats.push(`${horsPerimetre} anomalie(s) d'autres cycles également relevée(s) (non notées à ce stade, mais à votre crédit).`);
+  if (!ajustements.length) constats.push("Aucun ajustement proposé dans le tableau E1 : les anomalies relevées doivent y être reportées avec leur écriture de correction (NEP 450).");
+  return { note: borne(note), constats };
+}
+
+function noterTravaux(dossier, feuilles, documents) {
+  const constats = [];
+  const d = dossier.elements?.D1?.donnees || {};
+  const programme = [...(d.programme || []), ...(d.proceduresAjoutees || [])];
+  const total = Math.max(TRESORERIE.programme.length, programme.length);
+  const traitees = programme.filter((p) => p.statut).length;
+  const justifiees = programme.filter((p) => ['adapte', 'na'].includes(p.statut));
+  const fs = feuilles.filter((f) => f.cycle === 'tresorerie');
+  const completes = fs.filter((f) => rempli(f.titre, 3) && rempli(f.objectif, 10) && rempli(f.travail, 30) && rempli(f.conclusion, 15));
+  const avecRefs = fs.filter((f) => f.refsCroisees.length);
+  const avecElements = fs.filter((f) => f.elements.length);
+  const pieces = documents.filter((x) => x.cycle === 'tresorerie');
+  const rappro = (d.programme || []).slice(0, 3).filter((p) => p.statut === 'fait' || p.statut === 'adapte').length;
+  let note = (6 * traitees) / total;
+  note += justifiees.length ? (2 * justifiees.filter((p) => rempli(p.commentaire, 10)).length) / justifiees.length : traitees ? 2 : 0;
+  note += fs.length ? 6 * (completes.length / fs.length) * Math.min(1, fs.length / 3) : 0;
+  note += fs.length ? (2 * avecRefs.length) / fs.length : 0;
+  note += pieces.length ? 2 : 0;
+  note += avecElements.length ? 2 : 0;
+  constats.push(`${traitees} procédure(s) du programme traitée(s) sur ${total}.`);
+  if (traitees < total) constats.push('Un programme de travail doit être entièrement traité : chaque procédure est réalisée, adaptée ou écartée avec une justification (NEP 230 sur la documentation).');
+  if (justifiees.some((p) => !rempli(p.commentaire, 10))) constats.push('Des procédures « adaptées » ou « non applicables » ne sont pas justifiées.');
+  if (rappro < 3) constats.push("Les contrôles de l'état de rapprochement (exactitude, validation des soldes, apurement des suspens) ne sont pas tous documentés : c'est le cœur du cycle trésorerie.");
+  if (!fs.length) constats.push('Aucune feuille de travail : les contrôles réalisés ne sont pas documentés.');
+  else {
+    constats.push(`${fs.length} feuille(s) de travail, dont ${completes.length} complète(s) (objectif, travail effectué et conclusion rédigés).`);
+    if (fs.length < 3) constats.push('Moins de trois feuilles de travail : la documentation du cycle reste mince (rapprochement, revue des décaissements, séparation des exercices…).');
+    if (avecRefs.length < fs.length) constats.push('Des feuilles sans référence croisée : reliez chaque feuille au programme, aux risques (B4) et aux ajustements (E1).');
+  }
+  if (!pieces.length) constats.push("Aucune pièce justificative demandée : les contrôles reposent uniquement sur la comptabilité, sans élément probant externe (NEP 500).");
+  if (!avecElements.length && fs.length) constats.push("Aucune sélection de lignes ni pièce jointe aux feuilles : l'étendue des contrôles n'est pas démontrée.");
+  return { note: borne(note), constats };
+}
+
+function noterPlanification(dossier, anomalies, revue) {
+  const constats = [];
+  const don = (code) => dossier.elements?.[code]?.donnees || {};
+  const a1 = don('A1'); const a2 = don('A2'); const a3 = don('A3'); const b1 = don('B1'); const b2 = don('B2').cycles || {}; const b3 = don('B3'); const b4 = don('B4');
+  // A — acceptation (4 points)
+  let a = 0;
+  if (a1.decision && rempli(a1.justification, 20)) a += 1.5; else constats.push("A1 : décision d'acceptation non prise ou non justifiée.");
+  const reponsesA2 = Array.from({ length: 11 }, (_, i) => a2['r' + i]).filter(Boolean).length;
+  if (reponsesA2 === 11 && a2.conclusion) a += 1.5; else constats.push(`A2 : questionnaire d'indépendance incomplet (${reponsesA2}/11 réponses${a2.conclusion ? '' : ', pas de conclusion'}).`);
+  const crochets = typeof a3.texte === 'string' ? (a3.texte.match(/\[[^\]]+\]/g) || []).length : 99;
+  if (crochets <= 2 && lireNombre(a3.heures) && lireNombre(a3.taux)) a += 1; else constats.push('A3 : lettre de mission non finalisée (mentions entre crochets restantes ou budget absent).');
+  // B1 — prise de connaissance (3 points)
+  const champsB1 = ['activite', 'environnement', 'organisation', 'risques'].filter((k) => rempli(b1[k], 40)).length;
+  const b = 0.75 * champsB1;
+  if (champsB1 < 4) constats.push(`B1 : ${4 - champsB1} rubrique(s) de la prise de connaissance peu ou pas renseignée(s).`);
+  // B2 — contrôle interne (4 points)
+  const cycles = Object.keys(CYCLES);
+  const conclus = cycles.filter((c) => b2[c]?.risque);
+  const cyclesAnomalies = [...new Set(anomalies.map((x) => x.cycle))];
+  const detectes = cyclesAnomalies.filter((c) => ['moyen', 'eleve'].includes(b2[c]?.risque));
+  let ci = (2 * conclus.length) / cycles.length + (cyclesAnomalies.length ? (2 * detectes.length) / cyclesAnomalies.length : 2);
+  if (conclus.length < cycles.length) constats.push(`B2 : ${conclus.length} cycle(s) sur ${cycles.length} conclus dans les questionnaires de contrôle interne.`);
+  const manques = cyclesAnomalies.filter((c) => !detectes.includes(c));
+  if (manques.length) constats.push(`B2 : risque de contrôle interne jugé faible ou non évalué sur des cycles qui contenaient des anomalies (${manques.map((c) => CYCLES[c]).join(', ')}).`);
+  // B3 — revue analytique (5 points)
+  const significatives = revue.significatifs;
+  const commentees = significatives.filter((id) => rempli(b3[id], 15)).length;
+  const ra = (significatives.length ? (4 * commentees) / significatives.length : 4) + (rempli(b3.conclusion, 30) ? 1 : 0);
+  if (commentees < significatives.length) constats.push(`B3 : ${commentees} variation(s) significative(s) commentée(s) sur ${significatives.length}.`);
+  if (!rempli(b3.conclusion, 30)) constats.push('B3 : pas de conclusion de la revue analytique.');
+  // B4 — matrice des risques (4 points)
+  const risqueEleve = (c) => ASSERTIONS.some((_, i) => ['moyen', 'eleve'].includes(b4[`${c}_${i}`]));
+  const reperes = cyclesAnomalies.filter(risqueEleve);
+  const evalues = cycles.filter((c) => ASSERTIONS.some((_, i) => b4[`${c}_${i}`]));
+  let m = (cyclesAnomalies.length ? (2 * reperes.length) / cyclesAnomalies.length : 2) + (cycles.filter((c) => rempli(b4[c + '_reponse'], 10)).length / cycles.length) + (rempli(b4.fraude, 30) ? 1 : 0);
+  if (evalues.length < cycles.length) constats.push(`B4 : ${evalues.length} cycle(s) évalué(s) sur ${cycles.length} dans la matrice des risques.`);
+  const nonReperes = cyclesAnomalies.filter((c) => !reperes.includes(c));
+  if (nonReperes.length) constats.push(`B4 : aucun risque moyen ou élevé retenu sur des cycles qui contenaient des anomalies (${nonReperes.map((c) => CYCLES[c]).join(', ')}).`);
+  if (!rempli(b4.fraude, 30)) constats.push('B4 : le risque de fraude n\'est pas analysé (NEP 240).');
+  if (anomalies.some((x) => x.fraude) && !rempli(b4.fraude, 30)) constats.push('Le dossier contenait au moins une fraude : l\'analyse du risque de fraude était indispensable.');
+  ci = Math.min(4, ci); m = Math.min(4, m);
+  return { note: borne(a + b + ci + ra + m), constats };
+}
+
+const FOURCHETTES = { ca: [0.5, 2], produits: [0.5, 2], resultat: [5, 10], resultatNet: [5, 10], bilan: [1, 2], capitaux: [1, 5] };
+const CLES = { ca: 'chiffreAffaires', produits: 'produitsExploitation', resultat: 'resultatExploitation', resultatNet: 'resultatNet', bilan: 'totalBilan', capitaux: 'capitauxPropres' };
+const LIBELLES = { ca: "chiffre d'affaires", produits: "produits d'exploitation", resultat: "résultat d'exploitation", resultatNet: 'résultat net', bilan: 'total du bilan', capitaux: 'capitaux propres', autre: 'autre base' };
+
+function noterSeuils(dossier) {
+  const constats = [];
+  const d = dossier.elements?.C1?.donnees || {};
+  const n = dossier.chiffres.N;
+  const s = lireNombre(d.signification); const p = lireNombre(d.planification); const i = lireNombre(d.insignifiant); const taux = lireNombre(d.taux);
+  const base = n[CLES[d.base]];
+  const reference = Math.round(n.produitsExploitation * 0.01);
+  let note = 0;
+  if (!d.base || !s) {
+    constats.push('Seuil de signification non déterminé : il conditionne toute la mission (NEP 320).');
+    return { note: 0, constats, reference };
+  }
+  note += 3;
+  if (base && taux && proche(s, (base * taux) / 100, 0.05)) note += 3;
+  else constats.push('Le seuil de signification ne correspond pas au produit de la base par le taux indiqué.');
+  const [min, max] = FOURCHETTES[d.base] || [0, Infinity];
+  const pctBase = base ? (s / Math.abs(base)) * 100 : null;
+  if (pctBase != null && pctBase >= min * 0.9 && pctBase <= max * 1.1) note += 4;
+  else if (pctBase != null) constats.push(`Le seuil représente ${arrondi(pctBase).toString().replace('.', ',')} % du ${LIBELLES[d.base]}, hors de la fourchette usuelle de ${min} à ${max} %.`);
+  if (['resultat', 'resultatNet'].includes(d.base) && (base <= 0 || base < n.produitsExploitation * 0.02)) { note -= 2; constats.push(`Le ${LIBELLES[d.base]} est faible ou négatif : base instable, une base de chiffre d'affaires ou de produits était plus pertinente.`); }
+  if (p && p / s >= 0.5 && p / s <= 0.8) note += 3; else constats.push(`Seuil de planification ${p ? `à ${Math.round((p / s) * 100)} %` : 'absent'} : il se situe en général entre 50 et 75 % du seuil de signification selon le risque du dossier.`);
+  if (i && i / s >= 0.02 && i / s <= 0.1) note += 3; else constats.push(`Seuil des anomalies manifestement insignifiantes ${i ? `à ${arrondi((i / s) * 100).toString().replace('.', ',')} %` : 'absent'} : il se situe en général entre 3 et 10 % du seuil de signification.`);
+  if (rempli(d.justification, 200)) note += 4; else if (rempli(d.justification, 60)) { note += 2; constats.push('Justification des seuils trop succincte.'); } else constats.push('Choix des seuils non justifié.');
+  constats.unshift(`Seuil retenu : ${euro(s)} (${LIBELLES[d.base]}). À titre de repère, 1 % des produits d'exploitation donne ${euro(reference)}.`);
+  return { note: borne(note), constats, reference };
+}
+
+// ------------------------------------------------------------------ Évaluation complète
+/**
+ * revue : { significatifs: [identifiants des variations significatives de B3] }.
+ * Renvoie l'évaluation enregistrée dans le dossier à la clôture.
+ */
+export function evaluerMission({ dossier, corrige, feuilles, documents, revue }) {
+  const anomalies = corrige?.anomalies || [];
+  const ajustements = dossier.ajustements || [];
+  const comparaison = comparer(anomalies, ajustements, corrige?.donnees);
+  const sections = {
+    detection: noterDetection(anomalies, comparaison, ajustements),
+    travaux: noterTravaux(dossier, feuilles, documents),
+    planification: noterPlanification(dossier, anomalies, revue),
+    seuils: noterSeuils(dossier),
+  };
+  const globale = arrondi(Object.entries(PONDERATIONS).reduce((s, [k, poids]) => s + sections[k].note * poids, 0));
+  const ratees = comparaison.resultats.filter((r) => r.perimetre && !r.trouvee).map((r) => anomalies.find((a) => a.id === r.anomalieId));
+  return {
+    date: new Date().toISOString(), globale, sections, comparaison,
+    resume: {
+      perimetre: comparaison.resultats.filter((r) => r.perimetre).length,
+      trouvees: comparaison.resultats.filter((r) => r.perimetre && r.trouvee).length,
+      faussesAlertes: comparaison.faussesAlertes.length,
+      typesRates: ratees.map((a) => a.type),
+      cyclesRates: ratees.map((a) => a.cycle),
+      parCycle: Object.fromEntries(Object.keys(CYCLES).map((c) => {
+        const r = comparaison.resultats.filter((x) => x.perimetre && anomalies.find((a) => a.id === x.anomalieId).cycle === c);
+        return [c, { total: r.length, trouvees: r.filter((x) => x.trouvee).length }];
+      }).filter(([, v]) => v.total)),
+    },
+    ia: null, erreurIA: null,
+  };
+}
+
+/** Commentaire qualitatif de l'IA (rôle de l'associé signataire). Les notes ne changent pas. */
+export async function commenterParIA({ dossier, corrige, evaluation, feuilles, parametres }) {
+  const N = REFERENTIELS[dossier.parametres.referentiel].normes;
+  const t = (code, cle) => String(dossier.elements?.[code]?.donnees?.[cle] || '').slice(0, 700) || '(vide)';
+  const anomalies = corrige.anomalies;
+  const parId = new Map(anomalies.map((a) => [a.id, a]));
+  const ajs = new Map((dossier.ajustements || []).map((a) => [a.id, a]));
+  const decrire = (aj) => `« ${aj.description.slice(0, 200)} » — correction : ${aj.lignes.map((l) => `${lireNombre(l.debit) ? 'D' : 'C'} ${l.compte} ${lireNombre(l.debit) || lireNombre(l.credit)}`).join(', ')}`;
+  const systeme = `Tu es l'associé signataire d'un cabinet de commissariat aux comptes. Tu corriges le dossier d'un collaborateur junior qui s'entraîne. Référentiel : normes ${N}. Tu es exigeant, précis, bienveillant et concret ; tu t'adresses au collaborateur avec « vous ». Tu cites une norme par son numéro uniquement si elle s'applique réellement. Les notes sont déjà calculées : tu ne les modifies pas et tu ne les recalcules pas. Tu réponds uniquement par un objet JSON valide, en français.`;
+  const utilisateur = `CLIENT : ${dossier.client.nom} — ${dossier.client.secteur}, ${dossier.client.effectif} salariés. ${dossier.client.contexteMission}
+Produits d'exploitation : ${euro(dossier.chiffres.N.produitsExploitation)} ; résultat net : ${euro(dossier.chiffres.N.resultatNet)} ; total bilan : ${euro(dossier.chiffres.N.totalBilan)}.
+
+NOTES CALCULÉES (sur 20) : ${Object.entries(evaluation.sections).map(([k, s]) => `${SECTIONS[k]} : ${s.note}`).join(' ; ')} ; note globale : ${evaluation.globale}.
+CONSTATS AUTOMATIQUES : ${Object.values(evaluation.sections).flatMap((s) => s.constats).join(' ')}
+
+SEUILS DU COLLABORATEUR : base ${t('C1', 'base')}, taux ${t('C1', 'taux')} %, signification ${t('C1', 'signification')}, planification ${t('C1', 'planification')}, insignifiantes ${t('C1', 'insignifiant')}. Justification : ${t('C1', 'justification')}
+RISQUES IDENTIFIÉS (B1) : ${t('B1', 'risques')}
+RISQUE DE FRAUDE (B4) : ${t('B4', 'fraude')}
+
+ANOMALIES DU PÉRIMÈTRE NOTÉ :
+${evaluation.comparaison.resultats.filter((r) => r.perimetre).map((r) => { const a = parId.get(r.anomalieId); return `- ${a.libelle} (${euro(a.montant)}) : ${r.trouvee ? `TROUVÉE${r.chiffrage ? '' : ', chiffrage inexact'} — ${r.ajustements.map((id) => decrire(ajs.get(id))).join(' ; ')}` : `RATÉE — procédure qui l'aurait détectée : ${a.procedure}`}`; }).join('\n') || '(aucune)'}
+FAUSSES ALERTES : ${evaluation.comparaison.faussesAlertes.map((id) => decrire(ajs.get(id))).join(' ; ') || 'aucune'}
+
+FEUILLES DE TRAVAIL DU CYCLE TRÉSORERIE :
+${feuilles.filter((f) => f.cycle === 'tresorerie').slice(0, 8).map((f) => `${f.ref} « ${f.titre} » — objectif : ${f.objectif.slice(0, 200) || '(vide)'} — travail : ${f.travail.slice(0, 300) || '(vide)'} — conclusion : ${f.conclusion.slice(0, 200) || '(vide)'}`).join('\n') || '(aucune)'}
+
+Réponds avec ce JSON :
+{
+  "detection": "2 à 4 phrases sur les anomalies trouvées et ratées, et la qualité des écritures de correction",
+  "travaux": "2 à 4 phrases sur la documentation des travaux (feuilles, procédures, éléments probants)",
+  "planification": "2 à 4 phrases sur la prise de connaissance, l'évaluation des risques et le lien avec les anomalies réelles",
+  "seuils": "2 à 3 phrases sur le choix de la base, du taux et des seuils dérivés",
+  "synthese": "3 à 5 phrases de synthèse",
+  "points_a_retravailler": ["3 à 5 points concrets, chacun avec la technique ou la norme à revoir"]
+}`;
+  const r = await demanderJSON({ cle: parametres.cleGroq, modele: parametres.modele, systeme, utilisateur, temperature: 0.3, maxTokens: 1800 });
+  const texte = (v) => (typeof v === 'string' ? v.trim().slice(0, 1500) : '');
+  return {
+    detection: texte(r.detection), travaux: texte(r.travaux), planification: texte(r.planification), seuils: texte(r.seuils), synthese: texte(r.synthese),
+    points: (Array.isArray(r.points_a_retravailler) ? r.points_a_retravailler : []).map(texte).filter(Boolean).slice(0, 6),
+  };
+}

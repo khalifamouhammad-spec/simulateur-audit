@@ -1,7 +1,7 @@
 // Constantes du logiciel : référentiels, paramètres de création, structure du dossier d'audit.
 
-export const VERSION_APP = '2.0 — phase 4';
-export const PHASE_COURANTE = 4;
+export const VERSION_APP = '2.0 — phase 5';
+export const PHASE_COURANTE = 5;
 export const MODELE_GROQ_DEFAUT = 'llama-3.3-70b-versatile';
 export const URL_GROQ = 'https://api.groq.com/openai/v1';
 

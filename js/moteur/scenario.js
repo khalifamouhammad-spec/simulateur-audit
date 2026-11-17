@@ -48,7 +48,14 @@ export function completerChoix(choix, secteur, difficulte, nombre, rnd) {
     const i = Math.max(0, restants.findIndex((t) => !cycles.includes(BIBLIOTHEQUE[t].cycle)));
     retenus.push({ type: restants.splice(i, 1)[0], indice: '' });
   }
-  return retenus.slice(0, nombre);
+  const choisis = retenus.slice(0, nombre);
+  // Le cycle trésorerie est le premier cycle noté : le dossier en contient toujours au moins une anomalie.
+  const tresorerie = possibles.filter((t) => BIBLIOTHEQUE[t].cycle === 'tresorerie' && !choisis.some((r) => r.type === t));
+  if (choisis.length && tresorerie.length && !choisis.some((r) => BIBLIOTHEQUE[r.type].cycle === 'tresorerie')) {
+    const i = choisis.map((r) => !r.indice).lastIndexOf(true);
+    choisis[i >= 0 ? i : choisis.length - 1] = { type: rnd.choix(tresorerie), indice: '' };
+  }
+  return choisis;
 }
 
 /** Met en forme le scénario à partir de données brutes (IA ou modèle local) en bornant chaque valeur. */
