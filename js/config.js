@@ -1,7 +1,7 @@
 // Constantes du logiciel : référentiels, paramètres de création, structure du dossier d'audit.
 
-export const VERSION_APP = '2.0 — phase 2';
-export const PHASE_COURANTE = 2;
+export const VERSION_APP = '2.0 — phase 3';
+export const PHASE_COURANTE = 3;
 export const MODELE_GROQ_DEFAUT = 'llama-3.3-70b-versatile';
 export const URL_GROQ = 'https://api.groq.com/openai/v1';
 
@@ -123,3 +123,6 @@ export const NOMS_PROVISOIRES = {
   association: ['Association Solidarité Quartiers', 'Les Ateliers du Lien', 'Club Sportif des Coteaux'],
 };
 export const FORMES_PAR_TAILLE = { tpe: 'SARL', pme: 'SAS', eti: 'SA' };
+
+export const ASSERTIONS = ['Exhaustivité', 'Réalité', 'Séparation des exercices', 'Évaluation', 'Droits et obligations', 'Présentation'];
+export const NIVEAUX_RISQUE = { '': '—', faible: 'Faible', moyen: 'Moyen', eleve: 'Élevé' };

@@ -4,10 +4,18 @@ import { db, lireParametres } from '../db.js';
 import { enregistrerDossier, statutElement, avancement, dureeFr } from '../dossiers.js';
 import { genererClient } from '../generation.js';
 import { afficherFec, afficherBalance, afficherEtats } from '../sections/donnees.js';
+import { afficherFicheClient, afficherIndependance, afficherLettreMission, afficherFicheEntreprise, afficherMatriceRisques, afficherSeuils } from '../sections/planification.js';
+import { afficherControleInterne } from '../sections/controle-interne.js';
+import { afficherRevueAnalytique } from '../sections/revue-analytique.js';
 import { echapper, dateFr, euro, variationPct, pctFr } from '../utils.js';
 
 // Écrans fonctionnels, par code d'élément. Les autres affichent leur contenu prévu.
-const ECRANS = { X1: afficherFec, X2: afficherBalance, X3: afficherEtats };
+const ECRANS = {
+  X1: afficherFec, X2: afficherBalance, X3: afficherEtats,
+  A1: afficherFicheClient, A2: afficherIndependance, A3: afficherLettreMission,
+  B1: afficherFicheEntreprise, B2: afficherControleInterne, B3: afficherRevueAnalytique, B4: afficherMatriceRisques,
+  C1: afficherSeuils,
+};
 
 const pastille = (statut) => `<span class="pastille ${STATUTS[statut].classe}">${STATUTS[statut].libelle}</span>`;
 const recharger = () => window.dispatchEvent(new HashChangeEvent('hashchange'));
@@ -172,9 +180,19 @@ async function afficherElement(contenu, dossier, element, sauver, sauverDiffere)
       <h1><span class="code">${element.code}</span> ${echapper(element.libelle)}</h1>
       ${element.suivi ? `<label class="en-ligne">Statut <select data-statut ${cloturee ? 'disabled' : ''}>${Object.entries(STATUTS).map(([k, s]) => `<option value="${k}" ${etat.statut === k ? 'selected' : ''}>${s.libelle}</option>`).join('')}</select></label>` : ''}
     </div>`;
+  contenu.querySelector('[data-statut]')?.addEventListener('change', (e) => { etat.statut = e.target.value; sauver(); });
   if (ecran) {
-    if (!dossier.scenario) contenu.insertAdjacentHTML('beforeend', `<p class="message info">Le client n'est pas encore généré : rendez-vous sur la <a href="#/dossier/${dossier.id}">synthèse du dossier</a>.</p>`);
-    else await ecran(contenu, { dossier, sauver, sauverDiffere });
+    if (!dossier.scenario) { contenu.insertAdjacentHTML('beforeend', `<p class="message info">Le client n'est pas encore généré : rendez-vous sur la <a href="#/dossier/${dossier.id}">synthèse du dossier</a>.</p>`); return; }
+    const zone = document.createElement('fieldset');
+    zone.className = 'ecran';
+    zone.disabled = cloturee && element.suivi;
+    contenu.append(zone);
+    // « modifie » : à appeler à chaque saisie ; passe l'élément « en cours » et enregistre en différé.
+    const modifie = () => {
+      if (etat && etat.statut === 'a_faire') { etat.statut = 'en_cours'; contenu.querySelector('[data-statut]').value = 'en_cours'; }
+      sauverDiffere();
+    };
+    await ecran(zone, { dossier, sauver, sauverDiffere, modifie, lectureSeule: cloturee, donnees: etat ? (etat.donnees ??= {}) : null });
     return;
   }
   contenu.insertAdjacentHTML('beforeend', `
@@ -189,7 +207,6 @@ async function afficherElement(contenu, dossier, element, sauver, sauverDiffere)
       <textarea data-notes ${cloturee ? 'disabled' : ''} placeholder="Notes libres sur cet élément du dossier…">${echapper(etat.notes)}</textarea>
       <p class="discret" data-enregistre></p>
     </div>` : ''}`);
-  contenu.querySelector('[data-statut]')?.addEventListener('change', (e) => { etat.statut = e.target.value; sauver(); });
   contenu.querySelector('[data-notes]')?.addEventListener('input', (e) => {
     etat.notes = e.target.value;
     if (etat.statut === 'a_faire' && etat.notes.trim()) { etat.statut = 'en_cours'; contenu.querySelector('[data-statut]').value = 'en_cours'; }

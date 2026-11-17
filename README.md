@@ -2,7 +2,7 @@
 
 Simulateur de missions d'audit légal pour s'entraîner sur des cas réalistes.
 
-Logiciel d'audit d'entraînement (dossier, feuilles de travail, programmes, revue, rapport) sur des clients fictifs dotés d'un FEC. Développement par phases : **phases 1 (socle) et 2 (moteur FEC) terminées**.
+Logiciel d'audit d'entraînement (dossier, feuilles de travail, programmes, revue, rapport) sur des clients fictifs dotés d'un FEC. Développement par phases : **phases 1 (socle), 2 (moteur FEC) et 3 (planification) terminées**.
 
 Le premier simulateur (cycle trésorerie seul) reste disponible dans [`v1/`](v1/).
 
@@ -22,6 +22,7 @@ La clé API Groq se saisit dans **Paramètres** ; elle est stockée uniquement d
 
 ```bash
 node tests/test-fec.mjs
+node tests/test-analytique.mjs
 ```
 
 Génère des clients pour tous les secteurs, tailles et difficultés et contrôle : écritures équilibrées, numérotation continue, lettrage, bilan équilibré, résultat identique au bilan et au compte de résultat, à-nouveaux de N égaux à la clôture de N-1, export réglementaire.
@@ -48,6 +49,10 @@ Génère des clients pour tous les secteurs, tailles et difficultés et contrôl
 | `js/moteur/plan.js` | Plan de comptes, journaux, colonnes du FEC, paramètres par secteur | 2 |
 | `js/generation.js` | Enchaîne scénario, génération, contrôles et enregistrement | 2 |
 | `js/sections/donnees.js` | Consultation et export du FEC, balance, états financiers | 2 |
+| `js/moteur/analytique.js` | Revue analytique N / N-1 : postes, ratios, évolution mensuelle | 3 |
+| `js/sections/planification.js` | Fiche client, indépendance, lettre de mission, fiche entreprise, matrice des risques, seuils | 3 |
+| `js/sections/controle-interne.js` | Questionnaires de contrôle interne, réponses du client simulées | 3 |
+| `js/sections/revue-analytique.js` | Revue analytique à commenter | 3 |
 | `js/moteur/compta.js` | Contrôles d'équilibre, balance, bilan, compte de résultat | 2 |
 | `js/moteur/export-fec.js` | Export `.txt` (tabulations, 18 colonnes) | 2 |
 | `js/sections/` | Un module par section du dossier (A à H) | 3 à 7 |
