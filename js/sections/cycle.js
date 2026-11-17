@@ -320,12 +320,13 @@ async function afficherCycle(zone, { dossier, donnees, modifie, sauver, lectureS
     corps.querySelectorAll('[data-cle]').forEach((caseL) => caseL.addEventListener('change', () => { basculer(items.get(caseL.dataset.cle), caseL.checked); caseL.closest('tr').classList.toggle('cochee', caseL.checked); }));
   }
 
-  let donneesCachees;
+  let corrigeCache;
   async function dessinerOutils() {
-    donneesCachees ??= (await db.lire('corriges', dossier.id))?.donnees || {};
+    corrigeCache ??= (await db.lire('corriges', dossier.id)) || {};
+    const donneesCachees = corrigeCache.donnees || {};
     const id = etat.outil;
     const etatOutil = (etat.etatsOutils[id] ??= {});
-    const r = OUTILS[id].rendre({ dossier, annee, lignes: await lireFec(dossier, 'N'), donnees: donneesCachees, etat: etatOutil, panier });
+    const r = OUTILS[id].rendre({ dossier, annee, lignes: await lireFec(dossier, 'N'), donnees: donneesCachees, anomalies: corrigeCache.anomalies || [], etat: etatOutil, panier, donneesCycle: donnees, modifie, sauver });
     corps.innerHTML = `
       <div class="panneau"><div class="filtres"><label>Outil <select data-vue-outil>${config.outils.map((o) => `<option value="${o}" ${o === id ? 'selected' : ''}>${OUTILS[o].titre}</option>`).join('')}</select></label></div>
         <p class="discret">Les lignes cochées rejoignent la sélection : joignez-les à une feuille de travail ou proposez un ajustement.</p></div>
@@ -333,6 +334,7 @@ async function afficherCycle(zone, { dossier, donnees, modifie, sauver, lectureS
     corps.querySelector('[data-vue-outil]').addEventListener('change', (e) => { etat.outil = e.target.value; dessiner(); });
     corps.querySelectorAll('[data-etat-outil]').forEach((champ) => champ.addEventListener('change', () => { etatOutil[champ.dataset.etatOutil] = champ.type === 'checkbox' ? champ.checked : champ.value; dessiner(); }));
     corps.querySelectorAll('[data-tiers]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); etat.outil = a.dataset.outil; (etat.etatsOutils[a.dataset.outil] ??= {}).tiers = a.dataset.tiers; dessiner(); }));
+    r.brancher?.(corps, dessiner);
     corps.querySelectorAll('[data-cle]').forEach((caseL) => caseL.addEventListener('change', () => {
       basculer(r.items.get(caseL.dataset.cle), caseL.checked);
       if (r.redessinerApresSelection) dessiner(); else caseL.closest('tr').classList.toggle('cochee', caseL.checked);

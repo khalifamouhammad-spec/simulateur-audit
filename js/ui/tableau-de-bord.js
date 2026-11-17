@@ -1,5 +1,5 @@
 // Tableau de bord : liste des dossiers clients et création d'un dossier.
-import { SECTEURS, TAILLES, NIVEAUX, STATUTS_MISSION, REFERENTIELS, PHASE_COURANTE } from '../config.js';
+import { SECTEURS, TAILLES, NIVEAUX, STATUTS_MISSION, REFERENTIELS } from '../config.js';
 import { db, lireParametres } from '../db.js';
 import { creerDossier, avancement, dureeFr } from '../dossiers.js';
 import { echapper, dateFr } from '../utils.js';
@@ -41,7 +41,18 @@ export async function afficherTableauDeBord(vue) {
           }).join('') || '<tr><td colspan="11" class="vide">Aucun dossier. Créez votre premier client avec « Nouveau dossier ».</td></tr>'}</tbody>
         </table></div>
       </div>
-      <p class="discret">Les dossiers sont enregistrés dans ce navigateur (IndexedDB). Version en cours de développement : phase ${PHASE_COURANTE} sur 7.</p>
+      <details class="panneau"><summary>Mode d'emploi : déroulé d'une mission</summary>
+        <ol class="mode-emploi">
+          <li><strong>Créer un dossier</strong> (secteur, taille, difficulté, nombre d'anomalies). Le logiciel génère le client et son FEC N-1 et N ; les anomalies cachées restent invisibles jusqu'à la clôture.</li>
+          <li><strong>Planifier</strong> : A (acceptation, indépendance, lettre de mission), B (prise de connaissance, contrôle interne, revue analytique, matrice des risques), C (seuils).</li>
+          <li><strong>Travailler les cycles</strong> D1 à D8 : programme de travail, grand livre et sondages, outils (rapprochement, balance âgée, lettrage, circularisation, tests sur le FEC…), pièces justificatives, feuilles de travail.</li>
+          <li><strong>Reporter chaque anomalie</strong> dans E1 avec son écriture de correction, de préférence depuis les lignes sélectionnées, puis présenter les ajustements à la direction.</li>
+          <li><strong>Revue du manager</strong> (F1) : répondre à chaque point de revue.</li>
+          <li><strong>Finaliser</strong> : G1 événements postérieurs, G2 lettre d'affirmation, G3 note de synthèse, G4 rapport et opinion.</li>
+          <li><strong>Clôturer</strong> en H1 : corrigé détaillé, note sur 20 par section et note globale, puis suivi dans l'Historique.</li>
+        </ol>
+      </details>
+      <p class="discret">Les dossiers sont enregistrés dans ce navigateur (IndexedDB) : ils ne sont pas partagés entre appareils.</p>
     </main>
     <dialog>
       <form method="dialog">

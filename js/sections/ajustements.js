@@ -7,6 +7,7 @@ import { CYCLES, REFERENTIELS } from '../config.js';
 import { listerFeuilles } from '../feuilles.js';
 import { PLAN } from '../moteur/plan.js';
 import { echapper, euro, montantOuVide, lireNombre, identifiant } from '../utils.js';
+import { positionDirection } from '../moteur/evenements.js';
 
 export const DECISIONS = { attente: 'En attente', corrigee: 'Corrigée par le client', non_corrigee: 'Non corrigée' };
 const c = (n) => Math.round(lireNombre(n) * 100);
@@ -36,7 +37,7 @@ export async function ouvrirAjustement({ dossier, ajustement = null, base = {}, 
         <div class="grille">
           <div><label for="aj-cycle">Cycle</label><select id="aj-cycle" required><option value="">— Choisir —</option>${Object.entries(CYCLES).map(([k, v]) => `<option value="${k}" ${a.cycle === k ? 'selected' : ''}>${echapper(v)}</option>`).join('')}</select></div>
           <div><label for="aj-feuille">Feuille de travail de référence</label><select id="aj-feuille"><option value="">—</option>${feuilles.map((f) => `<option ${a.feuille === f.ref ? 'selected' : ''} value="${f.ref}">${f.ref} ${echapper(f.titre)}</option>`).join('')}</select></div>
-          <div><label for="aj-decision">Décision</label><select id="aj-decision">${Object.entries(DECISIONS).map(([k, v]) => `<option value="${k}" ${a.decision === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+          <div><label for="aj-decision">Décision de la direction</label><select id="aj-decision" disabled>${Object.entries(DECISIONS).map(([k, v]) => `<option value="${k}" ${a.decision === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="discret">Fixée lors de la présentation des ajustements à la direction (E1).</span></div>
         </div>
         <label for="aj-description">Nature de l'anomalie et incidence sur les comptes</label>
         <textarea id="aj-description" rows="3" required>${echapper(a.description)}</textarea>
@@ -116,7 +117,9 @@ export async function afficherAjustements(zone, { dossier, modifie, sauver, lect
           <div class="indicateur"><span>Corrigées par le client</span><strong>${euro(corriges)}</strong></div>
         </div>
         <p><span class="pastille ${position[0]}">${position[1]}</span></p>
-        <button type="button" class="principal" data-nouveau ${lectureSeule ? 'disabled' : ''}>+ Nouvel ajustement</button>
+        <div class="ligne"><button type="button" class="principal" data-nouveau ${lectureSeule ? 'disabled' : ''}>+ Nouvel ajustement</button>
+          <button type="button" data-presenter ${lectureSeule || !liste.some((a) => !a.presente) ? 'disabled' : ''}>Présenter ${liste.filter((a) => !a.presente).length || ''} ajustement(s) à la direction</button></div>
+        <p class="discret">La direction se prononce sur chaque ajustement présenté : elle accepte de corriger ou refuse. Seules les anomalies non corrigées entrent dans le cumul comparé au seuil et dans votre opinion (G4). Un ajustement présenté ne peut plus être modifié.</p>
       </div>
       <div class="panneau serre"><div class="defilement"><table class="dense">
         <thead><tr><th>N°</th><th>Cycle</th><th>Feuille</th><th>Anomalie</th><th>Écriture de correction</th><th class="nombre">Incidence résultat</th><th class="nombre">Incidence capitaux propres</th><th>Décision</th><th></th></tr></thead>
@@ -127,8 +130,8 @@ export async function afficherAjustements(zone, { dossier, modifie, sauver, lect
           return `<tr><td>${i + 1}</td><td>${echapper(CYCLES[a.cycle] || '')}</td><td class="code">${echapper(a.feuille)}</td><td>${echapper(a.description)}${a.commentaire ? `<br><span class="discret">${echapper(a.commentaire)}</span>` : ''}${mention}</td>
             <td class="ecriture">${a.lignes.map((l) => `${lireNombre(l.debit) ? 'D' : 'C'} ${echapper(l.compte)} ${echapper(l.libelle)} : ${montantOuVide(lireNombre(l.debit) || lireNombre(l.credit))}`).join('<br>')}</td>
             <td class="nombre">${euro(impact)}</td><td class="nombre">${euro(impact)}</td>
-            <td><select data-decision="${a.id}" aria-label="Décision">${Object.entries(DECISIONS).map(([k, v]) => `<option value="${k}" ${a.decision === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
-            <td class="actions"><button type="button" class="petit" data-modifier="${a.id}">Modifier</button> <button type="button" class="petit danger" data-supprimer="${a.id}">Supprimer</button></td></tr>`;
+            <td><span class="pastille ${{ attente: 'gris', corrigee: 'vert', non_corrigee: 'rouge' }[a.decision]}">${DECISIONS[a.decision]}</span></td>
+            <td class="actions">${a.presente ? '<span class="discret">Présenté</span>' : `<button type="button" class="petit" data-modifier="${a.id}">Modifier</button> <button type="button" class="petit danger" data-supprimer="${a.id}">Supprimer</button>`}</td></tr>`;
         }).join('') || '<tr><td colspan="9" class="vide">Aucun ajustement proposé. Ils se créent ici ou depuis les outils d\'un cycle.</td></tr>'}</tbody>
       </table></div></div>`;
     const apres = async () => { modifie(); await sauver(); dessiner(); };
@@ -139,7 +142,14 @@ export async function afficherAjustements(zone, { dossier, modifie, sauver, lect
       dossier.ajustements = dossier.ajustements.filter((a) => a.id !== b.dataset.supprimer);
       apres();
     }));
-    zone.querySelectorAll('[data-decision]').forEach((s) => s.addEventListener('change', () => { dossier.ajustements.find((a) => a.id === s.dataset.decision).decision = s.value; apres(); }));
+    zone.querySelector('[data-presenter]')?.addEventListener('click', () => {
+      const nouveaux = dossier.ajustements.filter((a) => !a.presente);
+      if (!confirm(`Présenter ${nouveaux.length} ajustement(s) à la direction ? Ils ne pourront plus être modifiés.`)) return;
+      const seuil = seuils.signification || Math.round(dossier.chiffres.N.produitsExploitation * 0.01);
+      const position = positionDirection(nouveaux, seuil, impactResultat);
+      for (const a of nouveaux) Object.assign(a, position.get(a.id), { presente: true });
+      apres();
+    });
   };
   dessiner();
 }

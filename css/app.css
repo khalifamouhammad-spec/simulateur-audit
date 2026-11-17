@@ -207,3 +207,8 @@ details.panneau summary { cursor: pointer; font-weight: 600; }
 table.dense tr.non-lettree td { background: #fffaf0; }
 .panneau.outil .corps-outil { padding: 0 .8rem .6rem; }
 .panneau.outil .corps-outil > .defilement { margin: 0 -.8rem -.6rem; }
+pre.lettre-pre { white-space: pre-wrap; font: .9rem/1.5 Georgia, "Times New Roman", serif; background: #fffdf8; border: 1px solid #d9d2c0; padding: .8rem 1rem; }
+.opinions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.opinions label.puce { padding: .3rem .7rem; }
+ol.mode-emploi { margin: .4rem 0 0; padding-left: 1.3rem; }
+ol.mode-emploi li { margin: .25rem 0; }

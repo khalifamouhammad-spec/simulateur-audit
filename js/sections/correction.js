@@ -5,12 +5,32 @@ import { db, lireParametres } from '../db.js';
 import { statutElement } from '../dossiers.js';
 import { listerFeuilles, listerDocuments } from '../feuilles.js';
 import { revueAnalytique } from '../moteur/analytique.js';
-import { evaluerMission, commenterParIA, SECTIONS, PONDERATIONS } from '../correction.js';
+import { evaluerMission, commenterParIA, ajouterTiers, SECTIONS, PONDERATIONS, OPINIONS_LIB } from '../correction.js';
+import { revueSoldee } from './revue.js';
+import { CLASSES_EVENEMENT } from '../moteur/evenements.js';
 import { impactResultat } from './ajustements.js';
 import { lireFec } from './donnees.js';
 import { echapper, euro, lireNombre } from '../utils.js';
 
 const note = (n) => `${String(n).replace('.', ',')} / 20`;
+
+/** Opinion et événements postérieurs dans le corrigé. */
+function blocFinalisation(ev) {
+  const f = ev.sections.finalisation;
+  if (!f?.opinion) return '';
+  const o = f.opinion;
+  return `<div class="panneau">
+    <h2>Opinion et événements postérieurs</h2>
+    <div class="defilement"><table class="dense"><tbody>
+      <tr><td>Votre opinion</td><td><strong>${echapper(OPINIONS_LIB[o.choisie] || 'aucune')}</strong></td></tr>
+      <tr><td>Opinion cohérente avec vos constats (anomalies non corrigées ${euro(o.propre)}, seuil ${euro(o.seuilPropre)})</td><td><span class="pastille ${o.choisie === o.coherente ? 'vert' : 'orange'}">${echapper(OPINIONS_LIB[o.coherente])}</span></td></tr>
+      <tr><td>Opinion appropriée au vu de la réalité (anomalies non corrigées ou non détectées ${euro(o.reel)}, seuil de référence ${euro(o.seuilRef)})</td><td><span class="pastille ${o.choisie === o.appropriee ? 'vert' : 'orange'}">${echapper(OPINIONS_LIB[o.appropriee])}</span></td></tr>
+    </tbody></table></div>
+    <p class="discret">Règle appliquée : cumul inférieur au seuil de signification → sans réserve ; significatif → réserve ; supérieur à cinq fois le seuil (incidence généralisée) → refus de certifier.</p>
+    ${f.evenements.length ? `<h3>Événements postérieurs à la clôture</h3><div class="defilement"><table class="dense"><thead><tr><th>Événement</th><th>Votre traitement</th><th>Traitement attendu</th></tr></thead><tbody>
+      ${f.evenements.map((e) => `<tr><td>${echapper(e.texte)}<br><span class="discret">${echapper(e.explication)}</span></td><td>${echapper(CLASSES_EVENEMENT[e.reponse] || '—')}</td><td><span class="pastille ${e.reponse === e.attendu ? 'vert' : 'orange'}">${echapper(CLASSES_EVENEMENT[e.attendu])}</span></td></tr>`).join('')}</tbody></table></div>` : ''}
+  </div>`;
+}
 const classeNote = (n) => (n >= 14 ? 'vert' : n >= 10 ? 'orange' : 'rouge');
 const recharger = () => window.dispatchEvent(new HashChangeEvent('hashchange'));
 
@@ -26,7 +46,7 @@ async function verificationsAvantCloture(dossier) {
   if (sansFeuille.length) alertes.push(`Cycles sans feuille de travail : ${sansFeuille.join(', ')}. Les travaux sont notés sur les cycles qui comportaient des anomalies.`);
   const enAttente = (dossier.ajustements || []).filter((a) => a.decision === 'attente');
   if (enAttente.length) alertes.push(`${enAttente.length} ajustement(s) sans décision du client.`);
-  const nonValides = ELEMENTS.filter((e) => e.suivi && e.phase <= 6 && statutElement(dossier, e.code) !== 'valide').map((e) => e.code);
+  const nonValides = ELEMENTS.filter((e) => e.suivi && e.phase <= 7 && statutElement(dossier, e.code) !== 'valide').map((e) => e.code);
   if (nonValides.length) alertes.push(`Éléments du dossier non validés : ${nonValides.join(', ')}.`);
   return alertes;
 }
@@ -48,6 +68,7 @@ export async function cloturerMission(dossier, suivi = () => {}) {
   const [corrige, feuilles, documents, n, n1] = await Promise.all([
     db.lire('corriges', dossier.id), listerFeuilles(dossier.id), listerDocuments(dossier.id), lireFec(dossier, 'N'), lireFec(dossier, 'N-1'),
   ]);
+  corrige.anomalies = ajouterTiers(corrige.anomalies, corrige.donnees, n, dossier.tiers);
   const seuil = dossier.seuils?.planification || Math.round(dossier.chiffres.N.produitsExploitation * 0.01);
   const r = revueAnalytique(n, n1, seuil);
   const significatifs = [...r.postes, ...r.ratios].filter((x) => x.significatif).map((x) => x.id).concat(r.mensuel.filter((m) => m.significatif).map((m) => 'mois_' + m.mois));
@@ -96,10 +117,10 @@ export async function afficherCorrection(zone, { dossier }) {
     </div>
     <div class="panneau serre"><h2 class="titre-tableau">Notes par section</h2><div class="defilement"><table class="dense">
       <thead><tr><th>Section</th><th class="nombre">Poids</th><th class="nombre">Note</th><th>Constats</th></tr></thead>
-      <tbody>${Object.entries(SECTIONS).map(([k, lib]) => `<tr><td><strong>${lib}</strong></td><td class="nombre">${Math.round(PONDERATIONS[k] * 100)} %</td>
+      <tbody>${Object.entries(SECTIONS).filter(([k]) => ev.sections[k]).map(([k, lib]) => `<tr><td><strong>${lib}</strong></td><td class="nombre">${Math.round(PONDERATIONS[k] * 100)} %</td>
         <td class="nombre"><span class="pastille ${classeNote(ev.sections[k].note)}">${note(ev.sections[k].note)}</span></td>
         <td><ul class="constats">${ev.sections[k].constats.map((c) => `<li>${echapper(c)}</li>`).join('')}</ul>${ia?.[k] ? `<p class="avis"><strong>Associé :</strong> ${echapper(ia[k])}</p>` : ''}</td></tr>`).join('')}
-        <tr class="total"><td>Note globale</td><td class="nombre">100 %</td><td class="nombre">${note(ev.globale)}</td><td class="discret">Opinion d'audit, revue du manager et finalisation : notées à partir de la phase 7.</td></tr></tbody>
+        <tr class="total"><td>Note globale</td><td class="nombre">100 %</td><td class="nombre">${note(ev.globale)}</td><td class="discret"></td></tr></tbody>
     </table></div></div>
     <div class="panneau">
       <h2>Appréciation de l'associé (normes ${N})</h2>
@@ -109,6 +130,7 @@ export async function afficherCorrection(zone, { dossier }) {
       <h3>Points à retravailler</h3>
       <ul>${(ia?.points?.length ? ia.points : pointsLocaux).map((p) => `<li>${echapper(p)}</li>`).join('') || '<li>Aucun point particulier.</li>'}</ul>
     </div>
+    ${blocFinalisation(ev)}
     <h2>Anomalies du périmètre noté (${perimetre.length})</h2>
     ${perimetre.filter((r) => !r.trouvee).map(blocAnomalie).join('')}
     ${perimetre.filter((r) => r.trouvee).map(blocAnomalie).join('')}
@@ -130,15 +152,25 @@ export async function afficherCorrection(zone, { dossier }) {
   });
 }
 
+/** Conditions bloquantes : revue du manager soldée et opinion formulée. */
+function bloquants(dossier) {
+  const b = [];
+  if (!revueSoldee(dossier)) b.push(`Revue du manager (F1) : demandez une revue et répondez à chaque point de revue.`);
+  if (!dossier.elements?.G4?.donnees?.opinion) b.push("Rapport (G4) : choisissez et justifiez votre opinion.");
+  return b;
+}
+
 async function afficherAvantCloture(zone, dossier) {
   const alertes = await verificationsAvantCloture(dossier);
+  const bloque = bloquants(dossier);
   zone.innerHTML = `
     <div class="panneau">
       <h2>Clôturer la mission</h2>
       <p>La clôture fige le dossier : vos travaux ne sont plus modifiables et le corrigé devient consultable ici, avec une note sur 20 par section et une note globale.</p>
       <p>Vos anomalies sont comparées au corrigé à partir du <a href="#/dossier/${dossier.id}/E1">tableau des ajustements (E1)</a> : une anomalie n'est « trouvée » que si un ajustement y renvoie à ses écritures ou en reprend le montant.</p>
       ${alertes.length ? `<div class="message attention"><strong>Points d'attention avant clôture</strong><ul>${alertes.map((a) => `<li>${echapper(a)}</li>`).join('')}</ul></div>` : '<p class="message succes">Aucun point d\'attention : le dossier est prêt à être clôturé.</p>'}
-      <button type="button" class="principal" data-cloturer>Clôturer la mission et afficher le corrigé</button>
+      ${bloque.length ? `<div class="message erreur"><strong>Clôture impossible pour l'instant</strong><ul>${bloque.map((x) => `<li>${echapper(x)}</li>`).join('')}</ul></div>` : ''}
+      <button type="button" class="principal" data-cloturer ${bloque.length ? 'disabled' : ''}>Clôturer la mission et afficher le corrigé</button>
       <p data-etat class="discret"></p>
     </div>`;
   zone.querySelector('[data-cloturer]').addEventListener('click', async (e) => {

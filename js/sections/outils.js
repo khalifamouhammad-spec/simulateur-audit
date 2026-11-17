@@ -7,6 +7,9 @@
 // et renvoie { html, items } ; items associe la clé d'une case à cocher à la ligne sélectionnable.
 import { aleatoire, ajouterJours, echapper, dateFr, euro, montantOuVide, ecartJours } from '../utils.js';
 import { COL, PLAN } from '../moteur/plan.js';
+import { reponsesTiers, confirmationBanque, lettreConfirmation, soldesTiers } from '../moteur/circularisation.js';
+import { construireBanque } from '../moteur/banque.js';
+import { TESTS, executerTest } from '../moteur/tests-fec.js';
 
 const c = (n) => Math.round(n * 100);
 const nombre = (n) => montantOuVide(n) || '0,00';
@@ -251,3 +254,118 @@ function capitauxPropres(ctx) {
   return tableauDoc(ctx, `Comptes de capitaux, de dettes financières et de comptes courants (soldes créditeurs en positif). Résultat de l'exercice ${ctx.annee} avant affectation : ${euro(resultat / 100)}.`,
     ['Compte', 'Ouverture', 'Augmentations', 'Diminutions', 'Clôture'], lignes);
 }
+
+// ------------------------------------------------------------------ Circularisation (NEP 505)
+
+const LIB_REPONSE = { accord: ['vert', 'Accord'], desaccord: ['orange', 'Désaccord'], non_reponse: ['rouge', 'Non-réponse'] };
+
+function circularisation(ctx, type) {
+  const prefixe = type === 'clients' ? '411' : '40';
+  const d = (ctx.donneesCycle.circularisation ??= { selection: [], envoyee: null, reponses: null, analyses: {} });
+  const soldes = [...soldesTiers(ctx.lignes, prefixe).values()].filter((t) => t.solde !== 0).sort((a, b) => Math.abs(b.solde) - Math.abs(a.solde));
+  const total = soldes.reduce((s, t) => s + Math.abs(t.solde), 0);
+  const couverture = (nums) => (total ? Math.round((soldes.filter((t) => nums.includes(t.num)).reduce((s, t) => s + Math.abs(t.solde), 0) / total) * 100) : 0);
+  if (!d.envoyee) {
+    return {
+      html: `<p class="discret">Sélectionnez les ${type} à circulariser (les soldes les plus significatifs, les soldes anormaux, les tiers à risque), puis envoyez les demandes. Couverture actuelle : <strong>${couverture(d.selection)} %</strong> des soldes en valeur absolue, ${d.selection.length} tiers.</p>
+        <div class="ligne"><label class="en-ligne">Sélectionner les <input type="number" data-nb-circ value="10" min="1" max="200" style="width:4.5rem"> soldes les plus élevés</label><button type="button" data-circ-auto>Appliquer</button>
+          <button type="button" class="principal" data-circ-envoyer ${d.selection.length ? '' : 'disabled'}>Envoyer les ${d.selection.length} demande(s) de confirmation</button></div>
+        <div class="defilement haut"><table class="dense"><thead><tr><th></th><th>Tiers</th><th class="nombre">Solde au 31/12</th></tr></thead>
+        <tbody>${soldes.map((t) => `<tr class="${d.selection.includes(t.num) ? 'cochee' : ''}"><td><input type="checkbox" data-circ="${t.num}" ${d.selection.includes(t.num) ? 'checked' : ''} aria-label="Circulariser"></td><td>${echapper(t.nom)} <span class="code discret">${t.num}</span></td><td class="nombre">${nombre(t.solde / 100)}</td></tr>`).join('') || '<tr><td colspan="3" class="vide">Aucun solde.</td></tr>'}</tbody></table></div>`,
+      items: new Map(),
+      brancher: (corps, redessiner) => {
+        corps.querySelectorAll('[data-circ]').forEach((x) => x.addEventListener('change', () => { d.selection = x.checked ? [...new Set([...d.selection, x.dataset.circ])] : d.selection.filter((n) => n !== x.dataset.circ); ctx.modifie(); redessiner(); }));
+        corps.querySelector('[data-circ-auto]').addEventListener('click', () => { d.selection = soldes.slice(0, Number(corps.querySelector('[data-nb-circ]').value) || 10).map((t) => t.num); ctx.modifie(); redessiner(); });
+        corps.querySelector('[data-circ-envoyer]').addEventListener('click', async () => { d.envoyee = `${ctx.annee + 1}-01-08`; ctx.modifie(); await ctx.sauver(); redessiner(); });
+      },
+    };
+  }
+  if (!d.reponses) {
+    const premier = soldes.find((t) => d.selection.includes(t.num));
+    return {
+      html: `<p class="message info">${d.selection.length} demande(s) envoyée(s) le ${dateFr(d.envoyee)}, couverture ${couverture(d.selection)} %. Les réponses parviennent directement au cabinet.</p>
+        <button type="button" class="principal" data-circ-recevoir>Recevoir les réponses</button>
+        <details><summary>Modèle de lettre envoyée</summary><pre class="lettre-pre">${echapper(lettreConfirmation({ dossier: ctx.dossier, tiers: premier?.nom || '', type, annee: ctx.annee }))}</pre></details>`,
+      items: new Map(),
+      brancher: (corps, redessiner) => corps.querySelector('[data-circ-recevoir]').addEventListener('click', async () => {
+        d.reponses = reponsesTiers({ selection: d.selection, type, lignesN: ctx.lignes, anomalies: ctx.anomalies, donnees: ctx.donnees, tiers: ctx.dossier.tiers, graine: ctx.dossier.scenario.graine, annee: ctx.annee });
+        ctx.modifie(); await ctx.sauver(); redessiner();
+      }),
+    };
+  }
+  const items = new Map(d.reponses.map((r) => { const it = itemDoc(`CIRC-${r.num}`, r.recueLe || `${ctx.annee + 1}-02-15`, `Circularisation ${r.nom} : ${LIB_REPONSE[r.reponse][1].toLowerCase()}${r.ecart ? `, écart ${euro(r.ecart)}` : ''}`, r.ecart || 0); return [it.cle, it]; }));
+  const nb = (t) => d.reponses.filter((r) => r.reponse === t).length;
+  return {
+    html: `<p class="discret">Demandes envoyées le ${dateFr(d.envoyee)} — ${d.reponses.length} tiers, couverture ${couverture(d.selection)} %. Accords : ${nb('accord')}, désaccords : ${nb('desaccord')}, non-réponses : ${nb('non_reponse')}.
+      Analysez chaque désaccord (écart justifié ou anomalie) et mettez en œuvre une procédure alternative pour chaque non-réponse (règlements postérieurs, pièces justificatives).</p>
+      <div class="defilement haut"><table class="dense"><thead><tr><th></th><th>Tiers</th><th class="nombre">Solde comptable</th><th>Réponse</th><th class="nombre">Solde confirmé</th><th class="nombre">Écart</th><th>Commentaire du tiers</th><th>Votre analyse / procédure alternative</th></tr></thead>
+      <tbody>${d.reponses.map((r) => { const cle = `doc|CIRC-${r.num}`; const [cl, lib] = LIB_REPONSE[r.reponse];
+        return `<tr class="${ctx.panier.has(cle) ? 'cochee' : ''}">${caseCochee(ctx, cle)}<td>${echapper(r.nom)}${r.recueLe ? `<br><span class="discret">reçue le ${dateFr(r.recueLe)}</span>` : ''}</td><td class="nombre">${nombre(r.soldeComptable)}</td><td><span class="pastille ${cl}">${lib}</span></td>
+          <td class="nombre">${r.soldeConfirme == null ? '—' : nombre(r.soldeConfirme)}</td><td class="nombre">${r.ecart ? nombre(r.ecart) : r.ecart === 0 ? '0,00' : '—'}</td><td>${echapper(r.commentaire)}</td>
+          <td class="reponse"><textarea rows="2" data-analyse="${r.num}" aria-label="Analyse">${echapper(d.analyses[r.num] || '')}</textarea></td></tr>`; }).join('')}</tbody></table></div>`,
+    items,
+    brancher: (corps) => corps.querySelectorAll('[data-analyse]').forEach((x) => x.addEventListener('input', () => { d.analyses[x.dataset.analyse] = x.value; ctx.modifie(); })),
+  };
+}
+
+function circularisationBanque(ctx) {
+  const d = (ctx.donneesCycle.circularisationBanque ??= { envoyee: null, reponse: null, analyse: '' });
+  if (!d.reponse) {
+    return {
+      html: `<p class="discret">Demande de confirmation adressée à la banque : soldes, emprunts, engagements, personnes habilitées (NEP 505).</p>
+        <button type="button" class="principal" data-banque-envoyer>${d.envoyee ? 'Recevoir la réponse de la banque' : 'Envoyer la demande et recevoir la réponse'}</button>
+        <details><summary>Modèle de lettre</summary><pre class="lettre-pre">${echapper(lettreConfirmation({ dossier: ctx.dossier, tiers: 'Banque du client — service des confirmations', type: 'banque', annee: ctx.annee }))}</pre></details>`,
+      items: new Map(),
+      brancher: (corps, redessiner) => corps.querySelector('[data-banque-envoyer]').addEventListener('click', async () => {
+        const banque = construireBanque(ctx.lignes, ctx.donnees, { graine: ctx.dossier.scenario.graine, annee: ctx.annee, difficulte: ctx.dossier.parametres.difficulte });
+        d.envoyee = `${ctx.annee + 1}-01-08`;
+        d.reponse = confirmationBanque({ banque, lignesN: ctx.lignes, dossier: ctx.dossier });
+        ctx.modifie(); await ctx.sauver(); redessiner();
+      }),
+    };
+  }
+  const r = d.reponse;
+  let soldeCompta = 0;
+  for (const l of ctx.lignes) if (l[COL.CompteNum] === '512000') soldeCompta += c(l[COL.Debit]) - c(l[COL.Credit]);
+  const it = itemDoc('CIRC-BANQUE', `${ctx.annee + 1}-01-25`, `Confirmation bancaire : solde ${euro(r.soldeCompte)}, capital restant dû ${euro(r.capitalRestantDu)}`, r.soldeCompte);
+  return {
+    html: `<p class="discret">Réponse reçue directement de la banque le ${dateFr(`${ctx.annee + 1}-01-25`)}.</p>
+      <table class="dense"><tbody>
+        <tr class="${ctx.panier.has(it.cle) ? 'cochee' : ''}">${caseCochee(ctx, it.cle)}<td>Solde du compte courant au 31/12/${ctx.annee} selon la banque</td><td class="nombre">${nombre(r.soldeCompte)}</td></tr>
+        <tr><td></td><td>Solde du compte 512000 en comptabilité</td><td class="nombre">${nombre(soldeCompta / 100)}</td></tr>
+        <tr><td></td><td>Capital restant dû des emprunts</td><td class="nombre">${nombre(r.capitalRestantDu)}</td></tr>
+        <tr><td></td><td>Engagements</td><td>${echapper(r.engagements)}</td></tr>
+        <tr><td></td><td>Personnes habilitées</td><td>${echapper(r.habilites)}</td></tr>
+      </tbody></table>
+      <label for="analyse-banque">Votre analyse (rapprochement avec l'état de rapprochement et le grand livre)</label><textarea id="analyse-banque" data-analyse-banque rows="3">${echapper(d.analyse)}</textarea>`,
+    items: new Map([[it.cle, it]]),
+    brancher: (corps) => corps.querySelector('[data-analyse-banque]').addEventListener('input', (e) => { d.analyse = e.target.value; ctx.modifie(); }),
+  };
+}
+
+// ------------------------------------------------------------------ Tests sur le FEC (NEP 240)
+function testsFec(ctx) {
+  const id = TESTS[ctx.etat.test] ? ctx.etat.test : 'weekend';
+  const resultats = executerTest(id, ctx.lignes, { annee: ctx.annee, seuilAutorisation: Math.round((ctx.dossier.seuilAutorisation || 0) * 100) });
+  const items = new Map();
+  const lignes = resultats.slice(0, 300).map((e) => {
+    const it = { cle: `fec|N|${e.num}`, source: 'fec', exercice: 'N', num: e.num, date: e.date, piece: e.piece, lib: e.lib, compte: '', montant: e.montant / 100 };
+    items.set(it.cle, it);
+    const contreparties = [...new Set(e.lignes.map((l) => l[COL.CompteNum]))].join(', ');
+    return `<tr class="${ctx.panier.has(it.cle) ? 'cochee' : ''}">${caseCochee(ctx, it.cle)}<td class="date">${dateFr(e.date)}</td><td>${e.journal}</td><td class="code">${e.num}</td><td>${echapper(e.piece)}</td><td>${echapper(e.lib)}</td><td class="code">${contreparties}</td><td class="nombre">${nombre(e.montant / 100)}</td><td>${echapper(e.utilisateur)}</td></tr>`;
+  });
+  return {
+    html: `<div class="filtres"><label>Test <select data-etat-outil="test">${Object.entries(TESTS).map(([k, t]) => `<option value="${k}" ${k === id ? 'selected' : ''}>${t.titre}</option>`).join('')}</select></label></div>
+      <p class="discret">${TESTS[id].description} Résultat : <strong>${resultats.length} écriture(s)</strong> sur l'exercice N. Toutes ne sont pas des anomalies : analysez-les.</p>
+      <div class="defilement haut"><table class="dense fec"><thead><tr><th></th><th>Date</th><th>Jal</th><th>N° écriture</th><th>Pièce</th><th>Libellé</th><th>Comptes</th><th class="nombre">Montant</th><th>Saisi par</th></tr></thead>
+      <tbody>${lignes.join('') || '<tr><td colspan="9" class="vide">Aucune écriture ne répond à ce critère.</td></tr>'}</tbody></table></div>`,
+    items,
+  };
+}
+
+Object.assign(OUTILS, {
+  circularisationClients: { titre: 'Circularisation des clients', rendre: (ctx) => circularisation(ctx, 'clients') },
+  circularisationFournisseurs: { titre: 'Circularisation des fournisseurs', rendre: (ctx) => circularisation(ctx, 'fournisseurs') },
+  circularisationBanque: { titre: 'Confirmation bancaire', rendre: circularisationBanque },
+  testsFec: { titre: 'Tests sur le FEC (écritures inhabituelles)', rendre: testsFec },
+});

@@ -5,17 +5,20 @@
 // par le journal de banque. Depuis la phase 6, tous les cycles sont disponibles.
 import { CYCLES, ASSERTIONS, REFERENTIELS } from './config.js';
 import { CONFIGS_CYCLES } from './cycles/index.js';
+import { anomaliesParTiers } from './moteur/circularisation.js';
+import { evenementsPosterieurs } from './moteur/evenements.js';
 import { impactResultat, equilibre } from './sections/ajustements.js';
 import { demanderJSON } from './groq.js';
 import { euro, lireNombre } from './utils.js';
 
 export const CYCLES_NOTES = Object.keys(CONFIGS_CYCLES);
-export const PONDERATIONS = { detection: 0.4, travaux: 0.25, planification: 0.2, seuils: 0.15 };
+export const PONDERATIONS = { detection: 0.35, travaux: 0.2, planification: 0.15, seuils: 0.1, finalisation: 0.2 };
 export const SECTIONS = {
   detection: 'Détection des anomalies et ajustements (E1)',
   travaux: 'Travaux sur les cycles (D)',
   planification: 'Planification : acceptation, prise de connaissance, risques (A, B)',
   seuils: 'Seuils de signification (C1)',
+  finalisation: 'Revue, finalisation et opinion (F, G)',
 };
 
 const arrondi = (n) => Math.round(n * 10) / 10;
@@ -41,6 +44,9 @@ export function clesAnomalie(a, donnees) {
   if (a.type === 'amortissement_oublie' && a.comptes[0]) cles.add(`doc|IMMO-${a.comptes[0]}`);
   if (a.type === 'stock_surevalue') { cles.add('doc|INV'); cles.add('doc|INV-PV'); }
   if (a.type === 'charges_sociales_non_rattachees') cles.add('doc|PAIE-12');
+  // Circularisation : réponse du tiers concerné, confirmation bancaire
+  for (const t of a.tiers || []) cles.add(`doc|CIRC-${t}`);
+  if (['frais_bancaires_non_comptabilises', 'cheque_ancien'].includes(a.type)) cles.add('doc|CIRC-BANQUE');
   return cles;
 }
 /** Clé d'une ligne référencée par un ajustement (voir sections/cycle.js). */
@@ -225,6 +231,76 @@ function noterSeuils(dossier) {
   return { note: borne(note), constats, reference };
 }
 
+// ------------------------------------------------------------------ Finalisation et opinion
+export const OPINIONS_LIB = { sans_reserve: 'certification sans réserve', reserve: 'certification avec réserve', defavorable: 'refus de certifier pour désaccord', impossibilite: 'refus de certifier pour impossibilité' };
+/** Opinion appropriée pour un cumul d'anomalies non corrigées : significatif → réserve ; plus de 5 fois le seuil → généralisé. */
+export const opinionPour = (cumul, seuil) => (!seuil || cumul < seuil ? 'sans_reserve' : cumul < 5 * seuil ? 'reserve' : 'defavorable');
+
+/** Anomalies réellement non corrigées : ratées, ou trouvées mais refusées par la direction. */
+export function cumulReel(anomalies, comparaison, ajustements) {
+  const parId = new Map(ajustements.map((a) => [a.id, a]));
+  return comparaison.resultats.reduce((s, r) => {
+    const a = anomalies.find((x) => x.id === r.anomalieId);
+    const corrigee = r.trouvee && r.ajustements.every((id) => parId.get(id)?.decision === 'corrigee');
+    return s + (corrigee ? 0 : Math.abs(a.impactResultat));
+  }, 0);
+}
+
+function noterFinalisation(dossier, corrige, comparaison) {
+  const constats = [];
+  const don = (code) => dossier.elements?.[code]?.donnees || {};
+  const ajustements = dossier.ajustements || [];
+  let note = 0;
+  // F1 — revue (3 points)
+  const f1 = don('F1');
+  const points = f1.points || [];
+  if (!(f1.revues || []).length) constats.push('F1 : aucune revue du manager demandée.');
+  else {
+    const repondus = points.filter((x) => rempli(x.reponse, 5)).length;
+    note += points.length ? (3 * repondus) / points.length : 3;
+    if (repondus < points.length) constats.push(`F1 : ${points.length - repondus} point(s) de revue sans réponse.`);
+  }
+  // G1 — événements postérieurs (4 points)
+  const evenements = dossier.scenario ? evenementsPosterieurs(dossier, corrige) : [];
+  const g1 = don('G1');
+  const justes = evenements.filter((e) => g1['c_' + e.id] === e.attendu);
+  note += evenements.length ? (4 * justes.length) / evenements.length : 4;
+  if (evenements.length) constats.push(`G1 : ${justes.length} événement(s) postérieur(s) correctement traité(s) sur ${evenements.length}.`);
+  // G2 — lettre d'affirmation (2 points)
+  const g2 = don('G2').texte;
+  const crochets = typeof g2 === 'string' ? (g2.match(/\[[^\]]+\]/g) || []).length : 99;
+  if (crochets <= 2) note += 2; else constats.push("G2 : lettre d'affirmation non finalisée.");
+  // G3 — note de synthèse (3 points)
+  const g3 = don('G3');
+  const rubriques = ['contexte', 'risques', 'travaux', 'anomalies', 'suspens', 'conclusion'].filter((k) => rempli(g3[k], 40)).length;
+  note += (3 * rubriques) / 6;
+  if (rubriques < 6) constats.push(`G3 : ${6 - rubriques} rubrique(s) de la note de synthèse peu ou pas renseignée(s).`);
+  // G4 — opinion (8 points)
+  const g4 = don('G4');
+  const seuilPropre = dossier.seuils?.signification || lireNombre(don('C1').signification) || Math.round(dossier.chiffres.N.produitsExploitation * 0.01);
+  const seuilRef = Math.round(dossier.chiffres.N.produitsExploitation * 0.01);
+  const propre = ajustements.filter((a) => a.decision !== 'corrigee').reduce((t, a) => t + Math.abs(impactResultat(a)), 0);
+  const reel = cumulReel(corrige?.anomalies || [], comparaison, ajustements);
+  const coherente = opinionPour(propre, seuilPropre);
+  const appropriee = opinionPour(reel, seuilRef);
+  if (!g4.opinion) constats.push("G4 : aucune opinion formulée.");
+  else {
+    if (g4.opinion === coherente) note += 5;
+    else constats.push(`G4 : opinion « ${OPINIONS_LIB[g4.opinion]} » incohérente avec vos propres constats (anomalies non corrigées de ${euro(propre)} pour un seuil de ${euro(seuilPropre)} : ${OPINIONS_LIB[coherente]} attendue).`);
+    if (g4.opinion === appropriee) note += 2;
+    else constats.push(`G4 : au vu de la situation réelle (anomalies non corrigées ou non détectées : ${euro(reel)}), l'opinion appropriée était : ${OPINIONS_LIB[appropriee]}.`);
+    if (rempli(g4.justification, 150) || (g4.opinion !== 'sans_reserve' && rempli(g4.fondement, 100))) note += 1; else constats.push("G4 : choix de l'opinion insuffisamment justifié.");
+  }
+  if (ajustements.some((a) => !a.presente)) constats.push("E1 : des ajustements n'ont pas été présentés à la direction avant la clôture.");
+  return { note: borne(note), constats, opinion: { choisie: g4.opinion || null, coherente, appropriee, propre, reel, seuilPropre, seuilRef }, evenements: evenements.map((e) => ({ ...e, reponse: g1['c_' + e.id] || '' })) };
+}
+
+/** Ajoute aux anomalies les tiers qu'une circularisation ferait réagir. */
+export function ajouterTiers(anomalies, donnees, lignesN, tiers) {
+  const parTiers = anomaliesParTiers(anomalies, donnees, lignesN, tiers);
+  return anomalies.map((a) => ({ ...a, tiers: [...parTiers].filter(([, liste]) => liste.some((x) => x.type === a.type)).map(([num]) => num) }));
+}
+
 // ------------------------------------------------------------------ Évaluation complète
 /**
  * revue : { significatifs: [identifiants des variations significatives de B3] }.
@@ -239,6 +315,7 @@ export function evaluerMission({ dossier, corrige, feuilles, documents, revue })
     travaux: noterTravaux(dossier, feuilles, documents, anomalies),
     planification: noterPlanification(dossier, anomalies, revue),
     seuils: noterSeuils(dossier),
+    finalisation: noterFinalisation(dossier, corrige, comparaison),
   };
   const globale = arrondi(Object.entries(PONDERATIONS).reduce((s, [k, poids]) => s + sections[k].note * poids, 0));
   const ratees = comparaison.resultats.filter((r) => r.perimetre && !r.trouvee).map((r) => anomalies.find((a) => a.id === r.anomalieId));
@@ -274,6 +351,7 @@ Produits d'exploitation : ${euro(dossier.chiffres.N.produitsExploitation)} ; ré
 NOTES CALCULÉES (sur 20) : ${Object.entries(evaluation.sections).map(([k, s]) => `${SECTIONS[k]} : ${s.note}`).join(' ; ')} ; note globale : ${evaluation.globale}.
 CONSTATS AUTOMATIQUES : ${Object.values(evaluation.sections).flatMap((s) => s.constats).join(' ')}
 
+OPINION : choisie ${evaluation.sections.finalisation.opinion.choisie || 'aucune'} ; cohérente avec ses constats : ${evaluation.sections.finalisation.opinion.coherente} ; appropriée au vu de la réalité : ${evaluation.sections.finalisation.opinion.appropriee}. Justification : ${t('G4', 'justification')}
 SEUILS DU COLLABORATEUR : base ${t('C1', 'base')}, taux ${t('C1', 'taux')} %, signification ${t('C1', 'signification')}, planification ${t('C1', 'planification')}, insignifiantes ${t('C1', 'insignifiant')}. Justification : ${t('C1', 'justification')}
 RISQUES IDENTIFIÉS (B1) : ${t('B1', 'risques')}
 RISQUE DE FRAUDE (B4) : ${t('B4', 'fraude')}
@@ -291,13 +369,14 @@ Réponds avec ce JSON :
   "travaux": "2 à 4 phrases sur la documentation des travaux (feuilles, procédures, éléments probants)",
   "planification": "2 à 4 phrases sur la prise de connaissance, l'évaluation des risques et le lien avec les anomalies réelles",
   "seuils": "2 à 3 phrases sur le choix de la base, du taux et des seuils dérivés",
+  "finalisation": "2 à 4 phrases sur la revue, les événements postérieurs, la note de synthèse et le choix de l'opinion",
   "synthese": "3 à 5 phrases de synthèse",
   "points_a_retravailler": ["3 à 5 points concrets, chacun avec la technique ou la norme à revoir"]
 }`;
   const r = await demanderJSON({ cle: parametres.cleGroq, modele: parametres.modele, systeme, utilisateur, temperature: 0.3, maxTokens: 1800 });
   const texte = (v) => (typeof v === 'string' ? v.trim().slice(0, 1500) : '');
   return {
-    detection: texte(r.detection), travaux: texte(r.travaux), planification: texte(r.planification), seuils: texte(r.seuils), synthese: texte(r.synthese),
+    detection: texte(r.detection), travaux: texte(r.travaux), finalisation: texte(r.finalisation), planification: texte(r.planification), seuils: texte(r.seuils), synthese: texte(r.synthese),
     points: (Array.isArray(r.points_a_retravailler) ? r.points_a_retravailler : []).map(texte).filter(Boolean).slice(0, 6),
   };
 }

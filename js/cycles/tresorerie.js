@@ -2,6 +2,7 @@
 // Les autres cycles (phase 6) suivent la même structure.
 export const TRESORERIE = {
   id: 'tresorerie', code: 'D1', libelle: 'Trésorerie', banque: true,
+  outils: ['circularisationBanque', 'testsFec'],
   comptes: [['512000', 'Banque'], ['627000', 'Services bancaires'], ['661160', 'Intérêts des emprunts'], ['164000', 'Emprunts'], ['471000', "Compte d'attente"], ['455000', 'Comptes courants d\'associés']],
   programme: [
     { titre: "Obtenir l'état de rapprochement bancaire au 31/12 et en contrôler l'exactitude arithmétique", assertion: 'Réalité', norme: '500' },

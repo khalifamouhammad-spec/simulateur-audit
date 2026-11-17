@@ -11,6 +11,8 @@ import { ecranCycle } from '../sections/cycle.js';
 import { afficherAjustements } from '../sections/ajustements.js';
 import { CONFIGS_CYCLES } from '../cycles/index.js';
 import { afficherCorrection } from '../sections/correction.js';
+import { afficherRevue } from '../sections/revue.js';
+import { afficherEvenements, afficherAffirmation, afficherSynthese as afficherNoteSynthese, afficherRapport } from '../sections/finalisation.js';
 import { echapper, dateFr, euro, variationPct, pctFr } from '../utils.js';
 
 // Écrans fonctionnels, par code d'élément. Les autres affichent leur contenu prévu.
@@ -21,6 +23,8 @@ const ECRANS = {
   C1: afficherSeuils,
   ...Object.fromEntries(Object.values(CONFIGS_CYCLES).map((c) => [c.code, ecranCycle(c)])),
   E1: afficherAjustements,
+  F1: afficherRevue,
+  G1: afficherEvenements, G2: afficherAffirmation, G3: afficherNoteSynthese, G4: afficherRapport,
   H1: afficherCorrection,
 };
 

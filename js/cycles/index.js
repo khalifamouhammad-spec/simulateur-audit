@@ -7,7 +7,7 @@ const P = (titre, assertion, norme) => ({ titre, assertion, norme });
 export const VENTES = {
   id: 'ventes', code: 'D2', libelle: 'Ventes / clients',
   comptes: [['411000', 'Clients'], ['707000', 'Ventes de marchandises'], ['706000', 'Prestations de services'], ['704000', 'Travaux'], ['701000', 'Ventes de produits finis'], ['445710', 'TVA collectée'], ['740000', "Subventions d'exploitation"]],
-  outils: ['balanceClients', 'lettrageClients', 'avoirs', 'annonces'],
+  outils: ['balanceClients', 'lettrageClients', 'circularisationClients', 'avoirs', 'annonces', 'testsFec'],
   programme: [
     P("Rapprocher le chiffre d'affaires comptabilisé de la facturation et de la TVA collectée", 'Exhaustivité', '500'),
     P('Tester la séparation des exercices : dernières factures de décembre et premières de janvier, rapprochées des bons de livraison', 'Séparation des exercices', '500'),
@@ -24,7 +24,7 @@ export const VENTES = {
 export const ACHATS = {
   id: 'achats', code: 'D3', libelle: 'Achats / fournisseurs',
   comptes: [['401000', 'Fournisseurs'], ['408100', 'Factures non parvenues'], ['404000', "Fournisseurs d'immobilisations"], ['607000', 'Achats de marchandises'], ['601000', 'Achats de matières premières'], ['604000', 'Achats de prestations'], ['611000', 'Sous-traitance'], ['622600', 'Honoraires'], ['615000', 'Entretien et réparations'], ['471000', "Compte d'attente"]],
-  outils: ['balanceFournisseurs', 'lettrageFournisseurs', 'factures'],
+  outils: ['balanceFournisseurs', 'lettrageFournisseurs', 'circularisationFournisseurs', 'factures', 'testsFec'],
   programme: [
     P('Rechercher les passifs non enregistrés : factures reçues et décaissements de janvier-février N+1', 'Exhaustivité', '500'),
     P('Contrôler les factures non parvenues de la clôture et l\'extourne de celles de l\'exercice précédent', 'Exhaustivité', '500'),
@@ -41,7 +41,7 @@ export const ACHATS = {
 export const STOCKS = {
   id: 'stocks', code: 'D4', libelle: 'Stocks',
   comptes: [['370000', 'Stocks de marchandises'], ['310000', 'Matières premières'], ['603700', 'Variation des stocks de marchandises'], ['603100', 'Variation des stocks de matières']],
-  outils: ['inventaire'],
+  outils: ['inventaire', 'testsFec'],
   programme: [
     P("Assister à l'inventaire physique et réaliser des comptages par sondage", 'Réalité', '501'),
     P("Rapprocher l'état de stock valorisé du procès-verbal d'inventaire et de la comptabilité", 'Exhaustivité', '501'),
@@ -55,7 +55,7 @@ export const STOCKS = {
 export const IMMOBILISATIONS = {
   id: 'immobilisations', code: 'D5', libelle: 'Immobilisations',
   comptes: [['213500', 'Installations générales'], ['215400', 'Matériel industriel'], ['218200', 'Matériel de transport'], ['218300', 'Matériel de bureau'], ['281540', 'Amortissements du matériel industriel'], ['681120', 'Dotations aux amortissements'], ['471000', "Compte d'attente"]],
-  outils: ['tableauImmobilisations'],
+  outils: ['tableauImmobilisations', 'testsFec'],
   programme: [
     P('Rapprocher le tableau de variation des immobilisations de la balance', 'Exhaustivité', '500'),
     P("Contrôler les acquisitions sur facture et le respect des critères de comptabilisation d'un actif", 'Classification', '500'),
@@ -69,7 +69,7 @@ export const IMMOBILISATIONS = {
 export const PERSONNEL = {
   id: 'personnel', code: 'D6', libelle: 'Personnel',
   comptes: [['641100', 'Salaires et appointements'], ['645100', "Cotisations à l'URSSAF"], ['421000', 'Rémunérations dues'], ['431000', 'Sécurité sociale'], ['428200', 'Congés à payer'], ['438200', 'Charges sociales sur congés à payer'], ['641200', 'Congés payés']],
-  outils: ['recapitulatifPaie'],
+  outils: ['recapitulatifPaie', 'testsFec'],
   programme: [
     P('Rapprocher les journaux de paie de la comptabilité', 'Exhaustivité', '500'),
     P('Revue analytique mensuelle des salaires, des effectifs et du taux de charges sociales', 'Exhaustivité', '520'),
@@ -83,7 +83,7 @@ export const PERSONNEL = {
 export const FISCAL = {
   id: 'fiscal', code: 'D7', libelle: 'Fiscal',
   comptes: [['445710', 'TVA collectée'], ['445660', 'TVA déductible'], ['445510', 'TVA à décaisser'], ['444000', 'Impôt sur les bénéfices'], ['695000', 'Impôt sur les bénéfices (charge)']],
-  outils: ['coherenceTva'],
+  outils: ['coherenceTva', 'testsFec'],
   programme: [
     P("Contrôler la cohérence entre chiffre d'affaires taxable, taux applicables et TVA collectée", 'Exhaustivité', '520'),
     P('Rapprocher les déclarations de TVA de la comptabilité', 'Exhaustivité', '500'),
@@ -96,7 +96,7 @@ export const FISCAL = {
 export const CAPITAUX = {
   id: 'capitaux', code: 'D8', libelle: 'Capitaux propres et provisions',
   comptes: [['101300', 'Capital'], ['102000', 'Fonds associatifs'], ['106800', 'Réserves'], ['110000', 'Report à nouveau'], ['120000', 'Résultat'], ['164000', 'Emprunts'], ['455000', "Comptes courants d'associés"]],
-  outils: ['capitauxPropres'],
+  outils: ['capitauxPropres', 'testsFec'],
   programme: [
     P('Rapprocher la variation des capitaux propres des procès-verbaux d\'assemblée', 'Réalité', '500'),
     P("Contrôler l'affectation du résultat de l'exercice précédent", 'Présentation', '500'),

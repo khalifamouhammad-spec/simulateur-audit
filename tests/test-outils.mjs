@@ -29,7 +29,7 @@ for (const secteur of Object.keys(SECTEURS)) for (const difficulte of Object.key
   for (const x of [...b.rapprochement.coteCompta, ...b.rapprochement.coteBanque]) selectionnables.add(cleReference({ source: 'rappro', num: x.num || x.id }));
   if (b.rapprochement.ecart) selectionnables.add(cleReference({ source: 'rappro', num: 'ecart' }));
   for (const config of Object.values(CONFIGS_CYCLES)) for (const id of config.outils || []) {
-    const res = OUTILS[id].rendre({ dossier, annee: 2025, lignes: r.fec.N, donnees: r.donnees, etat: {}, panier: new Map() });
+    const res = OUTILS[id].rendre({ dossier, annee: 2025, lignes: r.fec.N, donnees: r.donnees, anomalies: r.anomalies, etat: {}, panier: new Map(), donneesCycle: {}, modifie() {}, sauver: async () => {} });
     verifier(typeof res.html === 'string' && !/undefined|NaN/.test(res.html), `${nom} : outil ${id} mal rendu`);
     for (const it of res.items.values()) selectionnables.add(cleReference({ source: it.source, exercice: it.exercice, num: it.num || it.id }));
   }
@@ -43,7 +43,7 @@ for (const secteur of Object.keys(SECTEURS)) for (const difficulte of Object.key
   const balance = calculerBalance(r.fec.N);
   const solde = (prefixe) => balance.filter((l) => l.compte.startsWith(prefixe)).reduce((s, l) => s + c(l.soldeDebiteur) - c(l.soldeCrediteur), 0);
   for (const [outil, prefixe] of [['balanceClients', '411'], ['balanceFournisseurs', '40']]) {
-    const html = OUTILS[outil].rendre({ dossier, annee: 2025, lignes: r.fec.N, donnees: r.donnees, etat: {}, panier: new Map() }).html;
+    const html = OUTILS[outil].rendre({ dossier, annee: 2025, lignes: r.fec.N, donnees: r.donnees, anomalies: r.anomalies, etat: {}, panier: new Map(), donneesCycle: {}, modifie() {}, sauver: async () => {} }).html;
     const total = html.match(/<tr class="total"><td colspan="2">Total[^<]*<\/td><td class="nombre">([^<]+)</);
     const lu = total ? c(Number(total[1].replace(/[\s  ]/g, '').replace(',', '.'))) : NaN;
     verifier(lu === solde(prefixe), `${nom} : balance âgée ${prefixe} (${lu}) ≠ balance (${solde(prefixe)})`);
