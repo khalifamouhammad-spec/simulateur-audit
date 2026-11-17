@@ -26,9 +26,9 @@ export async function afficherParametres(vue) {
         <h2>Référentiel</h2>
         <label for="p-ref">Plan comptable et normes d'audit</label>
         <select id="p-ref">${Object.values(REFERENTIELS).map((r) => `<option value="${r.id}" ${r.disponible ? '' : 'disabled'} ${p.referentiel === r.id ? 'selected' : ''}>${echapper(r.libelle)}</option>`).join('')}</select>
-        <p class="discret">Le référentiel SYSCOHADA révisé / ISA (zone OHADA) est prévu et sera activé ultérieurement. Le référentiel s'applique aux dossiers créés ensuite.</p>
+        <p class="discret">Pour le SYSCOHADA révisé et les normes ISA, utilisez le simulateur OHADA (lien ci-dessous).</p>
       </div>
-      <p class="discret">Version ${VERSION_APP}. Le simulateur de trésorerie d'origine reste disponible : <a href="v1/">ouvrir la version 1</a>.</p>
+      <p class="discret">Version ${VERSION_APP}. Version OHADA (SYSCOHADA révisé, normes ISA, Sénégal) : <a href="../simulateur-audit-ohada/">ouvrir le simulateur OHADA</a>. Le simulateur de trésorerie d'origine reste disponible : <a href="v1/">ouvrir la version 1</a>.</p>
     </main>`;
 
   const etat = vue.querySelector('[data-etat]');

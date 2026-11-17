@@ -92,4 +92,4 @@ Ils génèrent des centaines de clients (tous secteurs, tailles et difficultés)
 
 ## Référentiel
 
-Plan comptable général et normes NEP. SYSCOHADA révisé / ISA est prévu dans les paramètres mais pas encore implémenté.
+Plan comptable général et normes NEP. Pour le SYSCOHADA révisé et les normes ISA (Sénégal), voir le simulateur OHADA : https://khalifamouhammad-spec.github.io/simulateur-audit-ohada/

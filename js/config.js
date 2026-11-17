@@ -7,7 +7,6 @@ export const URL_GROQ = 'https://api.groq.com/openai/v1';
 
 export const REFERENTIELS = {
   pcg: { id: 'pcg', libelle: 'PCG français / normes NEP', planComptable: 'Plan comptable général', normes: 'NEP', devise: 'EUR', disponible: true },
-  syscohada: { id: 'syscohada', libelle: 'SYSCOHADA révisé / normes ISA (à venir)', planComptable: 'SYSCOHADA révisé', normes: 'ISA', devise: 'XOF', disponible: false },
 };
 
 export const SECTEURS = {
