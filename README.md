@@ -77,6 +77,12 @@ Les notes sont calculées par le logiciel ; l'IA ne rédige que les commentaires
 | `js/sections/` | Écrans du dossier : données, planification, contrôle interne, revue analytique, cycles et outils, ajustements, revue, finalisation, correction |
 | `js/ui/` | Tableau de bord, dossier (bandeau + arborescence), historique, paramètres |
 
+## Importer un FEC
+
+Bouton **Importer un FEC** sur le tableau de bord : crée un dossier à partir d'un fichier des écritures de l'exercice N (et, si possible, N-1) — FEC réglementaire (.txt), export du journal (.csv) ou fichier préparé par Claude. Séparateurs, formats de date et colonnes Débit / Crédit ou Montant + Sens sont reconnus automatiquement ; un fichier déséquilibré est refusé. Le dossier importé dispose de tous les écrans et outils (les outils fondés sur des documents fictifs sont masqués) ; comme le logiciel n'en connaît pas les anomalies, la détection n'est pas notée à la clôture.
+
+Mode d'emploi complet : [`docs/Mode-d-emploi-simulateurs-audit.pdf`](docs/Mode-d-emploi-simulateurs-audit.pdf). Prompt pour se faire former par Claude : [`docs/prompt-formation-audit.md`](docs/prompt-formation-audit.md).
+
 ## Tests
 
 ```bash
@@ -86,6 +92,7 @@ node tests/test-banque.mjs
 node tests/test-correction.mjs
 node tests/test-outils.mjs
 node tests/test-finalisation.mjs
+node tests/test-import.mjs
 ```
 
 Ils génèrent des centaines de clients (tous secteurs, tailles et difficultés) et contrôlent : écritures équilibrées, numérotation, lettrage, bilan équilibré, résultat identique au bilan et au compte de résultat, à-nouveaux de N égaux à la clôture de N-1, export réglementaire, rapprochement bancaire, pièces, sondages, atteignabilité de chaque anomalie, circularisation, tests sur le FEC, notation et opinion.

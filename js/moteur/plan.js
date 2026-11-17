@@ -7,6 +7,8 @@ export const JOURNAUX = { AN: 'À-nouveaux', VE: 'Ventes', AC: 'Achats', BQ: 'Ba
 // deux colonnes internes (hors export) : l'utilisateur de saisie et la date de saisie.
 export const COLONNES_FEC = ['JournalCode', 'JournalLib', 'EcritureNum', 'EcritureDate', 'CompteNum', 'CompteLib', 'CompAuxNum', 'CompAuxLib',
   'PieceRef', 'PieceDate', 'EcritureLib', 'Debit', 'Credit', 'EcritureLet', 'DateLet', 'ValidDate', 'Montantdevise', 'Idevise'];
+/** Comptes de banque (y compris les sous-comptes d'un FEC importé). */
+export const estBanque = (compte) => /^512/.test(String(compte));
 export const COL = Object.fromEntries([...COLONNES_FEC, 'Utilisateur', 'DateSaisie'].map((nom, i) => [nom, i]));
 
 export const PLAN = {
