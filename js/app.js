@@ -22,7 +22,9 @@ async function router() {
     if (route === 'dossier') fermerVue = await afficherDossier(vue, args[0], args[1]);
     else if (route === 'parametres') await afficherParametres(vue);
     else await afficherTableauDeBord(vue);
+    window.logicielDemarre = true;
   } catch (e) {
+    window.logicielDemarre = true;
     vue.innerHTML = `<main class="page"><p class="message erreur">${echapper(e.message)}</p></main>`;
   }
 }
