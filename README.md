@@ -2,7 +2,7 @@
 
 Simulateur de missions d'audit légal pour s'entraîner sur des cas réalistes.
 
-Logiciel d'audit d'entraînement (dossier, feuilles de travail, programmes, revue, rapport) sur des clients fictifs dotés d'un FEC. Développement par phases : **phase 1 (socle) terminée**.
+Logiciel d'audit d'entraînement (dossier, feuilles de travail, programmes, revue, rapport) sur des clients fictifs dotés d'un FEC. Développement par phases : **phases 1 (socle) et 2 (moteur FEC) terminées**.
 
 Le premier simulateur (cycle trésorerie seul) reste disponible dans [`v1/`](v1/).
 
@@ -17,6 +17,14 @@ python3 -m http.server 8000
 Puis ouvrir http://localhost:8000 (et http://localhost:8000/v1/ pour le premier simulateur).
 
 La clé API Groq se saisit dans **Paramètres** ; elle est stockée uniquement dans le navigateur (IndexedDB), jamais dans le code ni dans le dépôt.
+
+## Tests du moteur
+
+```bash
+node tests/test-fec.mjs
+```
+
+Génère des clients pour tous les secteurs, tailles et difficultés et contrôle : écritures équilibrées, numérotation continue, lettrage, bilan équilibré, résultat identique au bilan et au compte de résultat, à-nouveaux de N égaux à la clôture de N-1, export réglementaire.
 
 ## Qui fait quoi
 
@@ -36,7 +44,10 @@ La clé API Groq se saisit dans **Paramètres** ; elle est stockée uniquement d
 | `js/ui/` | Tableau de bord, dossier (bandeau + arborescence), paramètres | 1 |
 | `js/moteur/scenario.js` | Scénario rédigé par l'IA, contrôlé par le code | 2 |
 | `js/moteur/generateur-fec.js` | FEC N et N-1 (ventes, achats, paie, immobilisations, trésorerie, TVA, OD) | 2 |
-| `js/moteur/anomalies/` | Bibliothèque d'anomalies types, une par fichier de cycle | 2 |
+| `js/moteur/anomalies.js` | Bibliothèque d'anomalies types (22 à ce stade) et leur injection | 2 |
+| `js/moteur/plan.js` | Plan de comptes, journaux, colonnes du FEC, paramètres par secteur | 2 |
+| `js/generation.js` | Enchaîne scénario, génération, contrôles et enregistrement | 2 |
+| `js/sections/donnees.js` | Consultation et export du FEC, balance, états financiers | 2 |
 | `js/moteur/compta.js` | Contrôles d'équilibre, balance, bilan, compte de résultat | 2 |
 | `js/moteur/export-fec.js` | Export `.txt` (tabulations, 18 colonnes) | 2 |
 | `js/sections/` | Un module par section du dossier (A à H) | 3 à 7 |

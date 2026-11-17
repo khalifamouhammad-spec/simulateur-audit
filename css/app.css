@@ -108,7 +108,7 @@ td.vide { text-align: center; color: var(--discret); padding: 1.5rem; }
 .arborescence .noeud.actif { background: var(--accent-clair); border-left-color: var(--accent); }
 .arborescence .noeud .code { flex: none; width: 1.7rem; }
 .arborescence .noeud .libelle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.contenu { flex: 1; min-width: 0; padding: 1rem 1.2rem 2rem; max-width: 1050px; }
+.contenu { flex: 1; min-width: 0; padding: 1rem 1.2rem 2rem; max-width: 1500px; }
 .fil { color: var(--discret); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 .2rem; }
 
 dialog { border: 1px solid var(--bord); border-radius: 8px; padding: 1.1rem; width: min(640px, 94vw); }
@@ -123,3 +123,27 @@ dialog::backdrop { background: rgba(15, 30, 50, .45); }
   .contenu { padding: .8rem; }
   .page { padding: .7rem; }
 }
+
+/* Phase 2 : données comptables */
+.panneau.serre { padding: 0; overflow: hidden; }
+.panneau.serre .titre-tableau { padding: .6rem .8rem .2rem; }
+.panneau.serre table.dense th:first-child, .panneau.serre table.dense td:first-child { padding-left: .8rem; }
+.defilement.haut { max-height: 68vh; overflow: auto; }
+.defilement.haut thead th { position: sticky; top: 0; z-index: 1; }
+.filtres { display: flex; flex-wrap: wrap; gap: .5rem .8rem; margin-bottom: .6rem; }
+.filtres label { margin: 0; font-weight: 600; font-size: .78rem; color: var(--discret); }
+.filtres label input, .filtres label select { display: block; width: auto; max-width: 100%; margin-top: .15rem; font-weight: 400; color: var(--texte); }
+.filtres label.large { flex: 1; min-width: 180px; }
+.filtres label.large input { width: 100%; }
+.pied-tableau { padding: .45rem .8rem; border-top: 1px solid var(--bord); background: #f7f9fb; }
+table.fec td { white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+table.dense td.date { white-space: nowrap; }
+table.dense tr.bande td { background: #f6f8fb; }
+table.dense tr.total td { font-weight: 700; background: #eef2f7; border-top: 2px solid var(--bord); }
+table.dense tr.rubrique td { font-weight: 600; }
+table.dense tr.detail { display: none; }
+.avec-detail table.dense tr.detail { display: table-row; }
+table.dense tr.detail td { color: var(--discret); font-size: .82rem; }
+table.dense tr.detail td:first-child { padding-left: 2rem; }
+input[type=date] { padding: .35rem .45rem; border: 1px solid var(--bord); border-radius: 5px; font: inherit; }
+input[type=checkbox] { width: 1rem; height: 1rem; }

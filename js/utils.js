@@ -56,3 +56,17 @@ export function aleatoire(graine) {
   };
   return rnd;
 }
+
+/** Propose un fichier texte au téléchargement. */
+export function telecharger(nom, contenu, type = 'text/plain;charset=utf-8') {
+  const url = URL.createObjectURL(new Blob([contenu], { type }));
+  const lien = Object.assign(document.createElement('a'), { href: url, download: nom });
+  document.body.append(lien);
+  lien.click();
+  lien.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Variation en % entre deux montants (null si la base est nulle). */
+export const variationPct = (n, n1) => (n1 ? ((n - n1) / Math.abs(n1)) * 100 : null);
+export const pctFr = (p) => (p == null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(1).replace('.', ',')} %`);

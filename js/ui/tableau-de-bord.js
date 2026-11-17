@@ -53,8 +53,8 @@ export async function afficherTableauDeBord(vue) {
         </div>
         <label for="n-extrait">Option : cas inspiré d'un vrai rapport</label>
         <textarea id="n-extrait" placeholder="Collez un extrait de rapport (par exemple un point clé de l'audit). L'IA construira un client fictif sur ce modèle, sans aucun nom réel."></textarea>
-        <p class="discret">Référentiel : ${echapper(REFERENTIELS[parametres.referentiel].libelle)}. Le scénario et le FEC du client seront générés à partir de ces paramètres (phase 2) ; en attendant, le dossier porte un nom provisoire.</p>
-        <div class="ligne fin"><button type="button" data-annuler>Annuler</button><button class="principal" value="ok">Créer le dossier</button></div>
+        <p class="discret">Référentiel : ${echapper(REFERENTIELS[parametres.referentiel].libelle)}. Le client et son FEC (N-1 et N) sont générés à partir de ces paramètres.${parametres.cleGroq ? '' : ' Aucune clé Groq enregistrée : utilisez « Créer sans IA » ou saisissez la clé dans les Paramètres.'}</p>
+        <div class="ligne fin"><button type="button" data-annuler>Annuler</button><button name="mode" value="local">Créer sans IA</button><button class="principal" name="mode" value="ia" ${parametres.cleGroq ? '' : 'disabled'}>Créer avec l'IA</button></div>
       </form>
     </dialog>`;
 
@@ -67,6 +67,7 @@ export async function afficherTableauDeBord(vue) {
     const dossier = await creerDossier({
       secteur: v('n-secteur'), taille: v('n-taille'), difficulte: v('n-difficulte'),
       nbAnomalies: Number(v('n-anomalies')), referentiel: parametres.referentiel, extraitRapport: v('n-extrait').trim(),
+      modeGeneration: e.submitter?.value === 'ia' ? 'ia' : 'local',
     });
     dialogue.close();
     location.hash = `#/dossier/${dossier.id}`;

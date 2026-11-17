@@ -8,14 +8,14 @@ import { identifiant } from './utils.js';
  * {
  *   id, creeLe, modifieLe,
  *   statut: 'en_cours' | 'en_revue' | 'cloturee',
- *   parametres: { secteur, taille, difficulte, nbAnomalies, referentiel, extraitRapport },
+ *   parametres: { secteur, taille, difficulte, nbAnomalies, referentiel, extraitRapport, modeGeneration },
  *   client: { nom, formeJuridique, secteur, provisoire },   // complété par le scénario en phase 2
  *   exercice: { debut, cloture },                           // dates AAAA-MM-JJ de l'exercice N
  *   tempsSecondes,
  *   elements: { [code]: { statut, notes } },                // état de chaque élément de l'arborescence
  * }
  */
-export async function creerDossier({ secteur, taille, difficulte, nbAnomalies, referentiel, extraitRapport = '' }) {
+export async function creerDossier({ secteur, taille, difficulte, nbAnomalies, referentiel, extraitRapport = '', modeGeneration = null }) {
   const annee = new Date().getFullYear() - 1;
   const existants = new Set((await db.tout('dossiers')).map((d) => d.client.nom));
   const noms = NOMS_PROVISOIRES[secteur];
@@ -26,7 +26,7 @@ export async function creerDossier({ secteur, taille, difficulte, nbAnomalies, r
     creeLe: maintenant,
     modifieLe: maintenant,
     statut: 'en_cours',
-    parametres: { secteur, taille, difficulte, nbAnomalies, referentiel, extraitRapport },
+    parametres: { secteur, taille, difficulte, nbAnomalies, referentiel, extraitRapport, modeGeneration },
     client: { nom, formeJuridique: secteur === 'association' ? 'Association loi 1901' : FORMES_PAR_TAILLE[taille], secteur: SECTEURS[secteur], provisoire: true },
     exercice: { debut: `${annee}-01-01`, cloture: `${annee}-12-31` },
     tempsSecondes: 0,
