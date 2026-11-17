@@ -43,7 +43,7 @@ for (const secteur of Object.keys(SECTEURS)) for (const difficulte of Object.key
   // Copie parfaite, ajustements reliés aux écritures
   const parfaite = { ...structuredClone(base), ajustements: r.anomalies.map((a, i) => ajustementParfait(a, i)) };
   const ev = evaluer(parfaite);
-  verifier(ev.resume.trouvees === perimetre.length, `${nom} : copie parfaite, ${ev.resume.trouvees}/${perimetre.length} trouvées`);
+  verifier(perimetre.length === r.anomalies.length && ev.resume.trouvees === perimetre.length, `${nom} : copie parfaite, ${ev.resume.trouvees}/${perimetre.length} trouvées`);
   verifier(ev.resume.faussesAlertes === 0, `${nom} : copie parfaite, ${ev.resume.faussesAlertes} fausse(s) alerte(s) (${ev.comparaison.faussesAlertes})`);
   verifier(ev.comparaison.resultats.every((x) => x.trouvee && x.chiffrage), `${nom} : copie parfaite, anomalie non trouvée ou mal chiffrée : ${ev.comparaison.resultats.filter((x) => !x.trouvee || !x.chiffrage).map((x) => r.anomalies.find((a) => a.id === x.anomalieId).type)}`);
   verifier(!perimetre.length || ev.sections.detection.note === 20, `${nom} : copie parfaite notée ${ev.sections.detection.note} en détection`);
@@ -61,7 +61,10 @@ for (const secteur of Object.keys(SECTEURS)) for (const difficulte of Object.key
   const malChiffre = { ...structuredClone(parfaite) };
   malChiffre.ajustements = malChiffre.ajustements.map((aj) => (!aj.references.length ? aj : { ...aj, lignes: aj.lignes.map((l) => ({ ...l, debit: l.debit ? String(Number(l.debit) * 3) : '', credit: l.credit ? String(Number(l.credit) * 3) : '' })) }));
   const ev4 = evaluer(malChiffre);
-  verifier(!perimetre.length || (ev4.sections.detection.note >= 15.9 && ev4.sections.detection.note <= 16.1), `${nom} : mauvais chiffrage noté ${ev4.sections.detection.note} (attendu 16)`);
+  // Les ajustements sans références gardent leur montant exact : ils conservent leurs points de précision.
+  const intacts = malChiffre.ajustements.filter((aj) => !aj.references.length && dansPerimetre(r.anomalies[Number(aj.id.slice(2))])).length;
+  const attendu = Math.round((16 + (4 * intacts) / perimetre.length) * 10) / 10;
+  verifier(!perimetre.length || Math.abs(ev4.sections.detection.note - attendu) < 0.11, `${nom} : mauvais chiffrage noté ${ev4.sections.detection.note} (attendu ${attendu})`);
   verifier(Math.abs(impactResultat(parfaite.ajustements[0]) - (r.anomalies[0].impactResultat || 0)) < 0.011 || !r.anomalies[0].impactResultat, `${nom} : ajustement de test mal construit`);
 }
 

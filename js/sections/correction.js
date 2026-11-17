@@ -1,5 +1,6 @@
 // H1 — Clôture de la mission et corrigé. Le corrigé n'est lu qu'après la clôture.
 import { CYCLES, REFERENTIELS, ELEMENTS } from '../config.js';
+import { CONFIGS_CYCLES } from '../cycles/index.js';
 import { db, lireParametres } from '../db.js';
 import { statutElement } from '../dossiers.js';
 import { listerFeuilles, listerDocuments } from '../feuilles.js';
@@ -21,10 +22,11 @@ async function verificationsAvantCloture(dossier) {
   if (!(dossier.ajustements || []).length) alertes.push("Aucun ajustement proposé dans le tableau E1 : c'est là que vos anomalies sont comparées au corrigé.");
   const sansConclusion = feuilles.filter((f) => !f.conclusion.trim());
   if (sansConclusion.length) alertes.push(`${sansConclusion.length} feuille(s) de travail sans conclusion (${sansConclusion.map((f) => f.ref).join(', ')}).`);
-  if (!feuilles.some((f) => f.cycle === 'tresorerie')) alertes.push('Aucune feuille de travail sur le cycle trésorerie (D1).');
+  const sansFeuille = Object.values(CONFIGS_CYCLES).filter((c) => !feuilles.some((f) => f.cycle === c.id)).map((c) => c.code);
+  if (sansFeuille.length) alertes.push(`Cycles sans feuille de travail : ${sansFeuille.join(', ')}. Les travaux sont notés sur les cycles qui comportaient des anomalies.`);
   const enAttente = (dossier.ajustements || []).filter((a) => a.decision === 'attente');
   if (enAttente.length) alertes.push(`${enAttente.length} ajustement(s) sans décision du client.`);
-  const nonValides = ELEMENTS.filter((e) => e.suivi && e.phase <= 5 && statutElement(dossier, e.code) !== 'valide').map((e) => e.code);
+  const nonValides = ELEMENTS.filter((e) => e.suivi && e.phase <= 6 && statutElement(dossier, e.code) !== 'valide').map((e) => e.code);
   if (nonValides.length) alertes.push(`Éléments du dossier non validés : ${nonValides.join(', ')}.`);
   return alertes;
 }
@@ -84,7 +86,7 @@ export async function afficherCorrection(zone, { dossier }) {
     <div class="panneau">
       <div class="ligne espace">
         <div><h2>Note globale</h2><div class="note-globale ${classeNote(ev.globale)}">${note(ev.globale)}</div>
-          <p class="discret">Mission clôturée le ${new Date(ev.date).toLocaleDateString('fr-FR')}. Périmètre noté : cycle trésorerie et anomalies passant par la banque.</p></div>
+          <p class="discret">Mission clôturée le ${new Date(ev.date).toLocaleDateString('fr-FR')}. Toutes les anomalies du dossier sont notées.</p></div>
         <div class="indicateurs" style="flex:1;min-width:280px">
           <div class="indicateur"><span>Trouvées</span><strong>${ev.resume.trouvees} / ${ev.resume.perimetre}</strong></div>
           <div class="indicateur"><span>Ratées</span><strong>${ev.resume.perimetre - ev.resume.trouvees}</strong></div>
@@ -116,7 +118,7 @@ export async function afficherCorrection(zone, { dossier }) {
       <p class="discret">Incidence ${euro(impactResultat(aj))} · ${aj.lignes.map((l) => `${lireNombre(l.debit) ? 'D' : 'C'} ${echapper(l.compte)} ${euro(lireNombre(l.debit) || lireNombre(l.credit))}`).join(' / ')}</p>
       <p>Cet ajustement ne correspond à aucune anomalie du dossier. Vérifiez votre raisonnement sur les lignes concernées : ${(aj.references || []).map((r) => echapper(r.num || r.lib)).join(', ') || 'aucune ligne référencée'}.</p></div>`; }).join('') || '<p class="discret">Aucune fausse alerte.</p>'}
     <details class="panneau"><summary>Autres anomalies du dossier, hors périmètre noté (${res.length - perimetre.length})</summary>
-      <p class="discret">Elles relèvent de cycles qui seront notés à partir de la phase 6. Elles sont données pour votre information.</p>
+      <p class="discret">Elles relèvent de cycles non encore disponibles au moment de la clôture.</p>
       ${res.filter((r) => !r.perimetre).map(blocAnomalie).join('') || '<p class="discret">Aucune.</p>'}
     </details>`;
   zone.querySelector('[data-ia]')?.addEventListener('click', async (e) => {

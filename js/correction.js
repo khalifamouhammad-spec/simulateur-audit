@@ -1,20 +1,19 @@
 // Correction d'une mission clôturée. Calcul entièrement fait par le code, à partir de ce que
 // l'auditeur a saisi et du corrigé caché. L'IA ne fait que commenter (voir commenterParIA).
 //
-// Périmètre noté (phase 5) : les anomalies du cycle trésorerie et toutes celles qui passent par
-// le journal de banque, détectables avec les outils du cycle D1. Les autres sont affichées
-// « hors périmètre » tant que leur cycle n'est pas disponible.
+// Périmètre noté : les anomalies des cycles disponibles (section D) et toutes celles qui passent
+// par le journal de banque. Depuis la phase 6, tous les cycles sont disponibles.
 import { CYCLES, ASSERTIONS, REFERENTIELS } from './config.js';
-import { TRESORERIE } from './cycles/tresorerie.js';
+import { CONFIGS_CYCLES } from './cycles/index.js';
 import { impactResultat, equilibre } from './sections/ajustements.js';
 import { demanderJSON } from './groq.js';
 import { euro, lireNombre } from './utils.js';
 
-export const CYCLES_NOTES = ['tresorerie'];
+export const CYCLES_NOTES = Object.keys(CONFIGS_CYCLES);
 export const PONDERATIONS = { detection: 0.4, travaux: 0.25, planification: 0.2, seuils: 0.15 };
 export const SECTIONS = {
   detection: 'Détection des anomalies et ajustements (E1)',
-  travaux: 'Travaux sur le cycle trésorerie (D1)',
+  travaux: 'Travaux sur les cycles (D)',
   planification: 'Planification : acceptation, prise de connaissance, risques (A, B)',
   seuils: 'Seuils de signification (C1)',
 };
@@ -27,18 +26,27 @@ export const dansPerimetre = (a) => CYCLES_NOTES.includes(a.cycle) || a.ecriture
 
 // ------------------------------------------------------------------ Rapprochement saisies / corrigé
 /** Clés des lignes qui « portent » une anomalie (écritures du FEC, lignes des documents bancaires). */
-function clesAnomalie(a, donnees) {
+export function clesAnomalie(a, donnees) {
   const cles = new Set(a.ecritures.map((e) => `fec|${e.exercice}|${e.num}`));
   if (a.type === 'frais_bancaires_non_comptabilises') {
     (donnees?.banque?.nonComptabilises || []).forEach((_, i) => cles.add(`banque|NC-${i}`));
     cles.add('banque|ecart');
   }
   if (a.type === 'cheque_ancien') (donnees?.banque?.chequesNonDebites || []).forEach((_, i) => cles.add(`banque|CHQ-ANCIEN-${i}`));
+  // Documents des outils de cycle (sections/outils.js)
+  const post = donnees?.posterieur || {};
+  if (a.type === 'fnp_oubliees') (post.factures || []).forEach((f, i) => { if (!f.provisionnee) cles.add(`doc|FAC-${i}`); });
+  if (a.type === 'avoirs_post_cloture') (post.avoirs || []).forEach((_, i) => cles.add(`doc|AV-${i}`));
+  if (a.type === 'client_procedure_collective') (post.faits || []).filter((f) => f.type === 'procedure_collective').forEach((_, i) => cles.add(`doc|BODACC-${i}`));
+  if (a.type === 'amortissement_oublie' && a.comptes[0]) cles.add(`doc|IMMO-${a.comptes[0]}`);
+  if (a.type === 'stock_surevalue') { cles.add('doc|INV'); cles.add('doc|INV-PV'); }
+  if (a.type === 'charges_sociales_non_rattachees') cles.add('doc|PAIE-12');
   return cles;
 }
 /** Clé d'une ligne référencée par un ajustement (voir sections/cycle.js). */
-function cleReference(r) {
+export function cleReference(r) {
   const num = String(r.num || '');
+  if (r.source === 'doc') return `doc|${num}`;
   if (r.source === 'fec') return `fec|${r.exercice || 'N'}|${num}`;
   if (/^R-/.test(num)) return `fec|N|${num.slice(2)}`;
   if (/^[A-Z]{2}\d{6}$/.test(num)) return `fec|N|${num}`;
@@ -98,38 +106,48 @@ function noterDetection(anomalies, comparaison, ajustements) {
   return { note: borne(note), constats };
 }
 
-function noterTravaux(dossier, feuilles, documents) {
+/** Note des travaux d'un cycle (section D), sur 20. */
+function noterCycle(config, dossier, feuilles, documents) {
   const constats = [];
-  const d = dossier.elements?.D1?.donnees || {};
+  const code = config.code;
+  const d = dossier.elements?.[code]?.donnees || {};
   const programme = [...(d.programme || []), ...(d.proceduresAjoutees || [])];
-  const total = Math.max(TRESORERIE.programme.length, programme.length);
+  const total = Math.max(config.programme.length, programme.length);
   const traitees = programme.filter((p) => p.statut).length;
   const justifiees = programme.filter((p) => ['adapte', 'na'].includes(p.statut));
-  const fs = feuilles.filter((f) => f.cycle === 'tresorerie');
+  const fs = feuilles.filter((f) => f.cycle === config.id);
   const completes = fs.filter((f) => rempli(f.titre, 3) && rempli(f.objectif, 10) && rempli(f.travail, 30) && rempli(f.conclusion, 15));
   const avecRefs = fs.filter((f) => f.refsCroisees.length);
   const avecElements = fs.filter((f) => f.elements.length);
-  const pieces = documents.filter((x) => x.cycle === 'tresorerie');
-  const rappro = (d.programme || []).slice(0, 3).filter((p) => p.statut === 'fait' || p.statut === 'adapte').length;
+  const pieces = documents.filter((x) => x.cycle === config.id);
   let note = (6 * traitees) / total;
   note += justifiees.length ? (2 * justifiees.filter((p) => rempli(p.commentaire, 10)).length) / justifiees.length : traitees ? 2 : 0;
   note += fs.length ? 6 * (completes.length / fs.length) * Math.min(1, fs.length / 3) : 0;
   note += fs.length ? (2 * avecRefs.length) / fs.length : 0;
   note += pieces.length ? 2 : 0;
   note += avecElements.length ? 2 : 0;
-  constats.push(`${traitees} procédure(s) du programme traitée(s) sur ${total}.`);
-  if (traitees < total) constats.push('Un programme de travail doit être entièrement traité : chaque procédure est réalisée, adaptée ou écartée avec une justification (NEP 230 sur la documentation).');
-  if (justifiees.some((p) => !rempli(p.commentaire, 10))) constats.push('Des procédures « adaptées » ou « non applicables » ne sont pas justifiées.');
-  if (rappro < 3) constats.push("Les contrôles de l'état de rapprochement (exactitude, validation des soldes, apurement des suspens) ne sont pas tous documentés : c'est le cœur du cycle trésorerie.");
-  if (!fs.length) constats.push('Aucune feuille de travail : les contrôles réalisés ne sont pas documentés.');
+  constats.push(`${code} ${config.libelle} : ${traitees}/${total} procédure(s) traitée(s), ${fs.length} feuille(s) dont ${completes.length} complète(s), ${pieces.length} pièce(s).`);
+  if (traitees < total) constats.push(`${code} : programme incomplet — chaque procédure est réalisée, adaptée ou écartée avec une justification (NEP 230).`);
+  if (justifiees.some((p) => !rempli(p.commentaire, 10))) constats.push(`${code} : des procédures « adaptées » ou « non applicables » ne sont pas justifiées.`);
+  if (config.id === 'tresorerie' && (d.programme || []).slice(0, 3).filter((p) => p.statut === 'fait' || p.statut === 'adapte').length < 3) constats.push("D1 : les contrôles de l'état de rapprochement (exactitude, validation des soldes, apurement des suspens) ne sont pas tous documentés.");
+  if (!fs.length) constats.push(`${code} : aucune feuille de travail, les contrôles ne sont pas documentés.`);
   else {
-    constats.push(`${fs.length} feuille(s) de travail, dont ${completes.length} complète(s) (objectif, travail effectué et conclusion rédigés).`);
-    if (fs.length < 3) constats.push('Moins de trois feuilles de travail : la documentation du cycle reste mince (rapprochement, revue des décaissements, séparation des exercices…).');
-    if (avecRefs.length < fs.length) constats.push('Des feuilles sans référence croisée : reliez chaque feuille au programme, aux risques (B4) et aux ajustements (E1).');
+    if (fs.length < 3) constats.push(`${code} : moins de trois feuilles de travail, documentation mince.`);
+    if (avecRefs.length < fs.length) constats.push(`${code} : des feuilles sans référence croisée (programme, risques B4, ajustements E1).`);
+    if (!avecElements.length) constats.push(`${code} : aucune sélection de lignes ni pièce jointe aux feuilles, l'étendue des contrôles n'est pas démontrée.`);
   }
-  if (!pieces.length) constats.push("Aucune pièce justificative demandée : les contrôles reposent uniquement sur la comptabilité, sans élément probant externe (NEP 500).");
-  if (!avecElements.length && fs.length) constats.push("Aucune sélection de lignes ni pièce jointe aux feuilles : l'étendue des contrôles n'est pas démontrée.");
+  if (!pieces.length) constats.push(`${code} : aucune pièce justificative demandée, pas d'élément probant externe (NEP 500).`);
   return { note: borne(note), constats };
+}
+
+/** Travaux : moyenne des cycles qui contenaient des anomalies (ceux qu'il fallait travailler). */
+function noterTravaux(dossier, feuilles, documents, anomalies) {
+  const cycles = [...new Set(anomalies.map((a) => a.cycle))].filter((c) => CONFIGS_CYCLES[c]);
+  const retenus = cycles.length ? cycles : ['tresorerie'];
+  const notes = retenus.map((c) => ({ c, ...noterCycle(CONFIGS_CYCLES[c], dossier, feuilles, documents) }));
+  const moyenne = notes.reduce((s, x) => s + x.note, 0) / notes.length;
+  const constats = [`Note moyenne des cycles qui comportaient des anomalies : ${notes.map((x) => `${CONFIGS_CYCLES[x.c].code} ${String(x.note).replace('.', ',')}`).join(' · ')}.`, ...notes.flatMap((x) => x.constats)];
+  return { note: borne(moyenne), constats, parCycle: Object.fromEntries(notes.map((x) => [x.c, x.note])) };
 }
 
 function noterPlanification(dossier, anomalies, revue) {
@@ -218,7 +236,7 @@ export function evaluerMission({ dossier, corrige, feuilles, documents, revue })
   const comparaison = comparer(anomalies, ajustements, corrige?.donnees);
   const sections = {
     detection: noterDetection(anomalies, comparaison, ajustements),
-    travaux: noterTravaux(dossier, feuilles, documents),
+    travaux: noterTravaux(dossier, feuilles, documents, anomalies),
     planification: noterPlanification(dossier, anomalies, revue),
     seuils: noterSeuils(dossier),
   };

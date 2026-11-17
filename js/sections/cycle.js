@@ -11,6 +11,7 @@ import { echantillonner, METHODES } from '../moteur/echantillon.js';
 import { ecritureDepuisFec, construirePiece } from '../moteur/pieces.js';
 import { lireFec } from './donnees.js';
 import { ouvrirAjustement } from './ajustements.js';
+import { OUTILS } from './outils.js';
 import { echapper, euro, dateFr, montantOuVide, lireNombre } from '../utils.js';
 
 const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
@@ -27,7 +28,7 @@ async function afficherCycle(zone, { dossier, donnees, modifie, sauver, lectureS
   const annee = Number(dossier.exercice.cloture.slice(0, 4));
   donnees.programme ??= config.programme.map(() => ({ statut: '', commentaire: '', feuille: '' }));
   donnees.proceduresAjoutees ??= [];
-  const etat = { onglet: 'programme', feuilleId: null, documentId: null, gl: { exercice: 'N', compte: config.comptes[0][0], du: '', au: '', min: '', texte: '' }, vueBanque: 'rappro', message: '' };
+  const etat = { onglet: 'programme', feuilleId: null, documentId: null, gl: { exercice: 'N', compte: config.comptes[0][0], du: '', au: '', min: '', texte: '' }, vueBanque: 'rappro', message: '', outil: config.outils?.[0] || null, etatsOutils: {} };
   const panier = new Map();
   let feuilles = await listerFeuilles(dossier.id, config.id);
   let documents = await listerDocuments(dossier.id, config.id);
@@ -42,7 +43,7 @@ async function afficherCycle(zone, { dossier, donnees, modifie, sauver, lectureS
 
   const ONGLETS = [
     ['programme', () => 'Programme de travail'], ['feuilles', () => `Feuilles de travail (${feuilles.length})`], ['gl', () => 'Grand livre et sondages'],
-    ...(config.banque ? [['banque', () => 'Banque']] : []), ['pieces', () => `Pièces justificatives (${documents.length})`],
+    ...(config.banque ? [['banque', () => 'Banque']] : []), ...(config.outils?.length ? [['outils', () => 'Outils du cycle']] : []), ['pieces', () => `Pièces justificatives (${documents.length})`],
   ];
   const majOnglets = () => {
     zone.querySelector('.onglets').innerHTML = ONGLETS.map(([id, titre]) => `<button type="button" role="tab" data-onglet="${id}" class="${id === etat.onglet ? 'actif' : ''}">${titre()}</button>`).join('');
@@ -199,7 +200,7 @@ async function afficherCycle(zone, { dossier, donnees, modifie, sauver, lectureS
         ? `<div class="panneau"><div class="ligne espace"><span>📄 <a href="#" data-piece="${el.documentId}">${echapper(el.titre)}</a></span><button type="button" class="petit danger" data-retirer="${i}">Retirer</button></div></div>`
         : `<div class="panneau serre"><div class="ligne espace" style="padding:.5rem .8rem"><input type="text" data-titre-element="${i}" value="${echapper(el.titre)}" style="flex:1" aria-label="Titre de la sélection"><button type="button" class="petit danger" data-retirer="${i}">Retirer</button></div>
             <div class="defilement"><table class="dense"><thead><tr><th>Source</th><th>Date</th><th>Écriture / pièce</th><th>Libellé</th><th class="nombre">Montant</th></tr></thead>
-            <tbody>${el.lignes.map((l) => `<tr><td>${{ fec: `FEC ${l.exercice}`, releve: 'Relevé', rappro: 'Rapprochement' }[l.source]}</td><td class="date">${dateFr(l.date)}</td><td class="code">${echapper(l.num || '')} ${echapper(l.piece || '')}</td><td>${echapper(l.lib)}</td><td class="nombre">${nombre(l.montant)}</td></tr>`).join('')}
+            <tbody>${el.lignes.map((l) => `<tr><td>${{ fec: `FEC ${l.exercice}`, releve: 'Relevé', rappro: 'Rapprochement', doc: 'Document' }[l.source]}</td><td class="date">${dateFr(l.date)}</td><td class="code">${echapper(l.num || '')} ${echapper(l.piece || '')}</td><td>${echapper(l.lib)}</td><td class="nombre">${nombre(l.montant)}</td></tr>`).join('')}
             <tr class="total"><td colspan="4">Total (${el.lignes.length} lignes)</td><td class="nombre">${nombre(el.lignes.reduce((s, l) => s + Math.round(l.montant * 100), 0) / 100)}</td></tr></tbody></table></div></div>`).join('')
         || '<p class="discret">Aucun élément joint. Depuis le grand livre, la banque ou les pièces, sélectionnez des lignes puis « Joindre à la feuille ».</p>'}`;
     let attente = null;
@@ -319,6 +320,25 @@ async function afficherCycle(zone, { dossier, donnees, modifie, sauver, lectureS
     corps.querySelectorAll('[data-cle]').forEach((caseL) => caseL.addEventListener('change', () => { basculer(items.get(caseL.dataset.cle), caseL.checked); caseL.closest('tr').classList.toggle('cochee', caseL.checked); }));
   }
 
+  let donneesCachees;
+  async function dessinerOutils() {
+    donneesCachees ??= (await db.lire('corriges', dossier.id))?.donnees || {};
+    const id = etat.outil;
+    const etatOutil = (etat.etatsOutils[id] ??= {});
+    const r = OUTILS[id].rendre({ dossier, annee, lignes: await lireFec(dossier, 'N'), donnees: donneesCachees, etat: etatOutil, panier });
+    corps.innerHTML = `
+      <div class="panneau"><div class="filtres"><label>Outil <select data-vue-outil>${config.outils.map((o) => `<option value="${o}" ${o === id ? 'selected' : ''}>${OUTILS[o].titre}</option>`).join('')}</select></label></div>
+        <p class="discret">Les lignes cochées rejoignent la sélection : joignez-les à une feuille de travail ou proposez un ajustement.</p></div>
+      <div class="panneau serre outil"><h2 class="titre-tableau">${OUTILS[id].titre}</h2><div class="corps-outil">${r.html}</div></div>`;
+    corps.querySelector('[data-vue-outil]').addEventListener('change', (e) => { etat.outil = e.target.value; dessiner(); });
+    corps.querySelectorAll('[data-etat-outil]').forEach((champ) => champ.addEventListener('change', () => { etatOutil[champ.dataset.etatOutil] = champ.type === 'checkbox' ? champ.checked : champ.value; dessiner(); }));
+    corps.querySelectorAll('[data-tiers]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); etat.outil = a.dataset.outil; (etat.etatsOutils[a.dataset.outil] ??= {}).tiers = a.dataset.tiers; dessiner(); }));
+    corps.querySelectorAll('[data-cle]').forEach((caseL) => caseL.addEventListener('change', () => {
+      basculer(r.items.get(caseL.dataset.cle), caseL.checked);
+      if (r.redessinerApresSelection) dessiner(); else caseL.closest('tr').classList.toggle('cochee', caseL.checked);
+    }));
+  }
+
   function dessinerPieces() {
     const d = documents.find((x) => x.id === etat.documentId) || documents[documents.length - 1];
     corps.innerHTML = `
@@ -344,7 +364,7 @@ async function afficherCycle(zone, { dossier, donnees, modifie, sauver, lectureS
 
   function dessiner() {
     majOnglets();
-    ({ programme: dessinerProgramme, feuilles: dessinerFeuilles, gl: dessinerGrandLivre, banque: dessinerBanque, pieces: dessinerPieces })[etat.onglet]();
+    ({ programme: dessinerProgramme, feuilles: dessinerFeuilles, gl: dessinerGrandLivre, banque: dessinerBanque, outils: dessinerOutils, pieces: dessinerPieces })[etat.onglet]();
   }
   zone.querySelector('.onglets').addEventListener('click', (e) => { const b = e.target.closest('[data-onglet]'); if (b) { if (b.dataset.onglet === 'feuilles') etat.feuilleId = null; aller(b.dataset.onglet); } });
   dessiner();

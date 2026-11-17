@@ -171,7 +171,7 @@ tr.significatif td { background: var(--orange-clair) !important; }
 .pastille.rouge { background: var(--rouge-clair); color: var(--rouge); }
 dialog.large { width: min(860px, 96vw); }
 .barre-panier { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: space-between; margin-top: .8rem; padding: .55rem .8rem; background: var(--marine); color: #fff; border-radius: 6px; }
-.barre-panier select { width: auto; max-width: 220px; }
+.barre-panier select { width: auto; max-width: 220px; color: var(--texte); }
 table.dense tr.cochee td { background: var(--orange-clair) !important; }
 .filtres.sondage { align-items: flex-end; margin: .6rem 0 0; padding-top: .6rem; border-top: 1px solid var(--bord); }
 label.en-ligne.puce { font-weight: 400; border: 1px solid var(--bord); border-radius: 12px; padding: .1rem .55rem; background: #fff; }
@@ -202,3 +202,8 @@ details.panneau summary { cursor: pointer; font-weight: 600; }
 .deux-colonnes.egales { grid-template-columns: 1fr 1fr; }
 .message.ligne { display: flex; }
 @media (max-width: 760px) { .deux-colonnes.egales { grid-template-columns: 1fr; } }
+
+/* Phase 6 : outils des cycles */
+table.dense tr.non-lettree td { background: #fffaf0; }
+.panneau.outil .corps-outil { padding: 0 .8rem .6rem; }
+.panneau.outil .corps-outil > .defilement { margin: 0 -.8rem -.6rem; }

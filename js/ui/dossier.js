@@ -9,7 +9,7 @@ import { afficherControleInterne } from '../sections/controle-interne.js';
 import { afficherRevueAnalytique } from '../sections/revue-analytique.js';
 import { ecranCycle } from '../sections/cycle.js';
 import { afficherAjustements } from '../sections/ajustements.js';
-import { TRESORERIE } from '../cycles/tresorerie.js';
+import { CONFIGS_CYCLES } from '../cycles/index.js';
 import { afficherCorrection } from '../sections/correction.js';
 import { echapper, dateFr, euro, variationPct, pctFr } from '../utils.js';
 
@@ -19,7 +19,7 @@ const ECRANS = {
   A1: afficherFicheClient, A2: afficherIndependance, A3: afficherLettreMission,
   B1: afficherFicheEntreprise, B2: afficherControleInterne, B3: afficherRevueAnalytique, B4: afficherMatriceRisques,
   C1: afficherSeuils,
-  D1: ecranCycle(TRESORERIE),
+  ...Object.fromEntries(Object.values(CONFIGS_CYCLES).map((c) => [c.code, ecranCycle(c)])),
   E1: afficherAjustements,
   H1: afficherCorrection,
 };
@@ -201,7 +201,7 @@ async function afficherElement(contenu, dossier, element, sauver, sauverDiffere)
       sauverDiffere();
     };
     // Mission clôturée : consultation seule. Seules les commandes de navigation (onglets, filtres) restent actives.
-    const verrouiller = () => zone.querySelectorAll('input, textarea, select, button').forEach((el) => { if (!el.matches('[data-onglet], [data-vue], [data-g], [data-retour], [data-f]')) el.disabled = true; });
+    const verrouiller = () => zone.querySelectorAll('input, textarea, select, button').forEach((el) => { if (!el.matches('[data-onglet], [data-vue], [data-vue-outil], [data-etat-outil], [data-g], [data-retour], [data-f]')) el.disabled = true; });
     if (cloturee && element.suivi) { zone.classList.add('lecture-seule'); new MutationObserver(verrouiller).observe(zone, { childList: true, subtree: true }); }
     await ecran(zone, { dossier, sauver, sauverDiffere, modifie, lectureSeule: cloturee, donnees: etat ? (etat.donnees ??= {}) : null });
     if (cloturee && element.suivi) verrouiller();
